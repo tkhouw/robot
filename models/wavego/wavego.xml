@@ -83,10 +83,10 @@
             <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
             <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
             <site name="FL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
-            <geom name="FL_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
+            <geom name="FL_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -118,10 +118,10 @@
             <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
             <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
             <site name="FR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
-            <geom name="FR_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
+            <geom name="FR_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -153,10 +153,10 @@
             <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
             <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
             <site name="RL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
-            <geom name="RL_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
+            <geom name="RL_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -188,10 +188,10 @@
             <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
             <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
             <site name="RR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
-            <geom name="RR_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
+            <geom name="RR_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -227,9 +227,9 @@
   </actuator>
 
   <keyframe>
-    <!-- Default standing pose with true opposite-bending diamond legs (<>) -->
+    <!-- Default standing pose with authentic CAD diamond legs (<>) and 115 deg foot bend -->
     <key name="stand"
-      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.7711 1.8267 0.8045 -0.7983  0.0 -0.7711 1.8267 0.8045 -0.7983  0.0 -0.7711 1.8268 0.8046 -0.7984  0.0 -0.7711 1.8269 0.8046 -0.7984"
+      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.7614 1.7813 0.7746 -0.7489  0.0 -0.7614 1.7814 0.7746 -0.7490  0.0 -0.7616 1.7814 0.7744 -0.7489  0.0 -0.7617 1.7815 0.7744 -0.7490"
       ctrl="-0.600 0.600 0.0  0.0 -0.600 0.600  -0.600 0.600 0.0  0.0 -0.600 0.600"/>
   </keyframe>
 </mujoco>
