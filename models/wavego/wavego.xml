@@ -1,199 +1,219 @@
 <mujoco model="wavego_pro">
-  <!-- Self-contained mesh assets copied locally into models/wavego/assets -->
+  <!-- Authentic WAVEGO Pro Closed-Loop MuJoCo Model -->
+  <!-- 4-bar closed kinematic chain per leg with equality connect constraints -->
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
 
-  <option cone="elliptic" impratio="100"/>
+  <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="100"/>
 
   <default>
     <default class="wavego">
-      <geom friction="0.8" margin="0.001" condim="3"/>
-      <joint axis="0 1 0" damping="0.05" armature="0.001" frictionloss="0.02"/>
-      <position kp="4.0" kv="0.1" inheritrange="1"/>
-      <default class="abduction">
+      <geom friction="1.2 0.02 0.01" margin="0.001" condim="3"/>
+      <joint damping="0.02" armature="0.001" frictionloss="0.01"/>
+      <position kp="15.0" kv="0.6" inheritrange="1"/>
+      <default class="hip_wiggle">
         <joint axis="1 0 0" range="-0.8 0.8"/>
       </default>
-      <default class="hip">
-        <default class="front_hip">
-          <joint range="-1.2 2.5"/>
-        </default>
-        <default class="back_hip">
-          <joint range="-0.5 3.0"/>
-        </default>
+      <default class="servo_pitch">
+        <joint axis="0 1 0" range="-1.6 1.6"/>
       </default>
-      <default class="knee">
-        <joint range="-2.6 -0.5"/>
+      <default class="passive_pitch">
+        <joint axis="0 1 0" damping="0.005" armature="0.0005"/>
       </default>
-      <default class="visual">
-        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
-      </default>
-      <default class="collision">
-        <geom group="3"/>
-        <default class="foot">
-          <geom size="0.008" pos="-0.0007 0 -0.0716" priority="1" solimp="0.015 1 0.022" condim="6"
-            friction="1.0 0.02 0.01"/>
-        </default>
+      <default class="foot_geom">
+        <geom size="0.008" priority="1" condim="6" friction="1.5 0.02 0.01" solimp="0.95 0.99 0.001" solref="0.004 1"/>
       </default>
     </default>
   </default>
 
   <asset>
-    <material name="metal" rgba=".9 .95 .95 1"/>
-    <material name="black" rgba="0.1 0.1 0.1 1"/>
-    <material name="white" rgba="0.9 0.9 0.9 1"/>
-    <material name="gray" rgba="0.5 0.5 0.5 1"/>
+    <mesh name="base_link" file="base_link.STL"/>
+    <mesh name="servo_1_link" file="servo_1_link.STL"/>
+    <mesh name="leg_1_link" file="leg_1_link.STL"/>
+    <mesh name="foot_1_link" file="foot_1_link.STL"/>
+    <mesh name="servo_2_link" file="servo_2_link.STL"/>
+    <mesh name="leg_2_link" file="leg_2_link.STL"/>
+    <mesh name="foot_2_link" file="foot_2_link.STL"/>
+    <mesh name="servo_3_link" file="servo_3_link.STL"/>
+    <mesh name="leg_3_link" file="leg_3_link.STL"/>
+    <mesh name="foot_3_link" file="foot_3_link.STL"/>
+    <mesh name="servo_4_link" file="servo_4_link.STL"/>
+    <mesh name="leg_4_link" file="leg_4_link.STL"/>
+    <mesh name="foot_4_link" file="foot_4_link.STL"/>
 
-    <mesh file="base_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="base_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="base_2.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="base_3.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="base_4.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="hip_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="hip_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="thigh_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="thigh_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="thigh_mirror_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="thigh_mirror_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="calf_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="calf_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="calf_mirror_0.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="calf_mirror_1.obj" scale="0.33 0.33 0.33"/>
-    <mesh file="foot.obj" scale="0.33 0.33 0.33"/>
+    <material name="chassis" rgba="0.82 0.84 0.92 1"/>
+    <material name="horn_fore" rgba="0.85 0.22 0.22 1"/>
+    <material name="horn_back" rgba="0.22 0.45 0.85 1"/>
+    <material name="pushrod" rgba="0.25 0.80 0.35 1"/>
+    <material name="shank" rgba="0.18 0.18 0.18 1"/>
+    <material name="servo_case" rgba="0.2 0.2 0.2 1"/>
   </asset>
 
   <worldbody>
-    <!-- Base body (chassis): Mass ~ 0.31 kg -->
-    <body name="base" pos="0 0 0.12" childclass="wavego">
-      <inertial pos="0.007 0 -0.0018" mass="0.31" diaginertia="0.0006 0.0006 0.0002"/>
+    <!-- Base body (chassis): Mass ~ 0.38 kg -->
+    <body name="base" pos="0 0 0.095" childclass="wavego">
       <freejoint/>
-      <geom mesh="base_0" material="black" class="visual"/>
-      <geom mesh="base_1" material="black" class="visual"/>
-      <geom mesh="base_2" material="black" class="visual"/>
-      <geom mesh="base_3" material="white" class="visual"/>
-      <geom mesh="base_4" material="gray" class="visual"/>
-      <geom size="0.062 0.025 0.019" type="box" class="collision"/>
-      <site name="imu" pos="0 0 0.015"/>
+      <geom type="mesh" mesh="base_link" material="chassis"/>
+      <geom type="box" size="0.065 0.025 0.018" pos="0 0 0.015" mass="0.38"/>
+      <site name="imu" pos="0 0 0.02"/>
 
-      <!-- Front Left Leg: Thigh = 40mm, Calf = 71.6mm -->
-      <body name="FL_hip" pos="0.0638 0.025 0">
-        <inertial pos="-0.0018 0.0006 0" mass="0.02" diaginertia="0.000005 0.000004 0.000003"/>
-        <joint name="FL_hip_joint" class="abduction"/>
-        <geom mesh="hip_0" material="metal" class="visual"/>
-        <geom mesh="hip_1" material="gray" class="visual"/>
-        <geom size="0.015 0.007" pos="0 0.026 0" quat="1 1 0 0" type="cylinder" class="collision"/>
-        <body name="FL_thigh" pos="0 0.0315 0">
-          <inertial pos="-0.0012 -0.007 -0.011" mass="0.025" diaginertia="0.00003 0.00003 0.000005"/>
-          <joint name="FL_thigh_joint" class="front_hip"/>
-          <geom mesh="thigh_0" material="metal" class="visual"/>
-          <geom mesh="thigh_1" material="gray" class="visual"/>
-          <geom size="0.035 0.005 0.006" pos="0 0 -0.020" quat="0.707107 0 0.707107 0" type="box" class="collision"/>
-          <body name="FL_calf" pos="0 0 -0.0400">
-            <inertial pos="0.002 0 -0.047" mass="0.015" diaginertia="0.00001 0.00001 0.000001"/>
-            <joint name="FL_calf_joint" class="knee"/>
-            <geom mesh="calf_0" material="gray" class="visual"/>
-            <geom mesh="calf_1" material="black" class="visual"/>
-            <geom size="0.004 0.02" pos="0.003 0 -0.02" quat="0.995 0 -0.1 0" type="cylinder" class="collision"/>
-            <geom pos="0 0 -0.0716" mesh="foot" class="visual" material="black"/>
-            <geom name="FL" class="foot"/>
+      <!-- ==================== FRONT LEFT (LF) ==================== -->
+      <body name="FL_hip" pos="0.0493 0.0285 0.024">
+        <joint name="FL_wiggle_joint" class="hip_wiggle" axis="1 0 0"/>
+        <geom size="0.012 0.009" pos="0 0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
+
+        <!-- Fore Servo Horn (A) -->
+        <body name="FL_fore_horn" pos="0.0061 0.01915 0">
+          <joint name="FL_fore_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
+          <!-- Fore Pushrod (L_b = 40 mm) -->
+          <body name="FL_fore_rod" pos="0 0 -0.040">
+            <joint name="FL_fore_rod_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.003" mass="0.005" material="pushrod"/>
+            <site name="FL_rod_knee" pos="0 0 -0.040" size="0.003"/>
+          </body>
+        </body>
+
+        <!-- Back Servo Horn (B) -->
+        <body name="FL_back_horn" pos="-0.0061 0.01915 0">
+          <joint name="FL_back_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
+          <!-- Shank Link (L_c = 39.8 mm, L_d = 31.8 mm, L_cd = 71.6 mm) -->
+          <body name="FL_shank" pos="0 0 -0.040">
+            <joint name="FL_shank_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
+            <site name="FL_shank_knee" pos="0 0 -0.0398" size="0.003"/>
+            <geom name="FL_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
 
-      <!-- Front Right Leg -->
-      <body name="FR_hip" pos="0.0638 -0.025 0">
-        <inertial pos="-0.0018 -0.0006 0" mass="0.02" diaginertia="0.000005 0.000004 0.000003"/>
-        <joint name="FR_hip_joint" class="abduction"/>
-        <geom mesh="hip_0" material="metal" class="visual" quat="0 1 0 0"/>
-        <geom mesh="hip_1" material="gray" class="visual" quat="0 1 0 0"/>
-        <geom size="0.015 0.007" pos="0 -0.026 0" quat="0.707107 0.707107 0 0" type="cylinder" class="collision"/>
-        <body name="FR_thigh" pos="0 -0.0315 0">
-          <inertial pos="-0.0012 0.007 -0.011" mass="0.025" diaginertia="0.00003 0.00003 0.000005"/>
-          <joint name="FR_thigh_joint" class="front_hip"/>
-          <geom mesh="thigh_mirror_0" material="metal" class="visual"/>
-          <geom mesh="thigh_mirror_1" material="gray" class="visual"/>
-          <geom size="0.035 0.005 0.006" pos="0 0 -0.020" quat="0.707107 0 0.707107 0" type="box" class="collision"/>
-          <body name="FR_calf" pos="0 0 -0.0400">
-            <inertial pos="0.002 0 -0.047" mass="0.015" diaginertia="0.00001 0.00001 0.000001"/>
-            <joint name="FR_calf_joint" class="knee"/>
-            <geom mesh="calf_mirror_0" material="gray" class="visual"/>
-            <geom mesh="calf_mirror_1" material="black" class="visual"/>
-            <geom size="0.004 0.02" pos="0.003 0 -0.02" quat="0.995 0 -0.1 0" type="cylinder" class="collision"/>
-            <geom pos="0 0 -0.0716" mesh="foot" class="visual" material="black"/>
-            <geom name="FR" class="foot"/>
+      <!-- ==================== FRONT RIGHT (FR) ==================== -->
+      <body name="FR_hip" pos="0.0493 -0.0235 0.024">
+        <joint name="FR_wiggle_joint" class="hip_wiggle" axis="-1 0 0"/>
+        <geom size="0.012 0.009" pos="0 -0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
+
+        <!-- Fore Servo Horn (A) -->
+        <body name="FR_fore_horn" pos="0.0061 -0.01915 0">
+          <joint name="FR_fore_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
+          <!-- Fore Pushrod (L_b = 40 mm) -->
+          <body name="FR_fore_rod" pos="0 0 -0.040">
+            <joint name="FR_fore_rod_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.003" mass="0.005" material="pushrod"/>
+            <site name="FR_rod_knee" pos="0 0 -0.040" size="0.003"/>
+          </body>
+        </body>
+
+        <!-- Back Servo Horn (B) -->
+        <body name="FR_back_horn" pos="-0.0061 -0.01915 0">
+          <joint name="FR_back_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
+          <!-- Shank Link -->
+          <body name="FR_shank" pos="0 0 -0.040">
+            <joint name="FR_shank_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
+            <site name="FR_shank_knee" pos="0 0 -0.0398" size="0.003"/>
+            <geom name="FR_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
 
-      <!-- Rear Left Leg -->
-      <body name="RL_hip" pos="-0.0638 0.025 0">
-        <inertial pos="0.0018 0.0006 0" mass="0.02" diaginertia="0.000005 0.000004 0.000003"/>
-        <joint name="RL_hip_joint" class="abduction"/>
-        <geom mesh="hip_0" material="metal" class="visual" quat="0 0 1 0"/>
-        <geom mesh="hip_1" material="gray" class="visual" quat="0 0 1 0"/>
-        <geom size="0.015 0.007" pos="0 0.026 0" quat="0.707107 0.707107 0 0" type="cylinder" class="collision"/>
-        <body name="RL_thigh" pos="0 0.0315 0">
-          <inertial pos="-0.0012 -0.007 -0.011" mass="0.025" diaginertia="0.00003 0.00003 0.000005"/>
-          <joint name="RL_thigh_joint" class="back_hip"/>
-          <geom mesh="thigh_0" material="metal" class="visual"/>
-          <geom mesh="thigh_1" material="gray" class="visual"/>
-          <geom size="0.035 0.005 0.006" pos="0 0 -0.020" quat="0.707107 0 0.707107 0" type="box" class="collision"/>
-          <body name="RL_calf" pos="0 0 -0.0400">
-            <inertial pos="0.002 0 -0.047" mass="0.015" diaginertia="0.00001 0.00001 0.000001"/>
-            <joint name="RL_calf_joint" class="knee"/>
-            <geom mesh="calf_0" material="gray" class="visual"/>
-            <geom mesh="calf_1" material="black" class="visual"/>
-            <geom size="0.004 0.02" pos="0.003 0 -0.02" quat="0.995 0 -0.1 0" type="cylinder" class="collision"/>
-            <geom pos="0 0 -0.0716" mesh="foot" class="visual" material="black"/>
-            <geom name="RL" class="foot"/>
+      <!-- ==================== REAR LEFT (RL / LH) ==================== -->
+      <body name="RL_hip" pos="-0.0507 0.0285 0.024">
+        <joint name="RL_wiggle_joint" class="hip_wiggle" axis="1 0 0"/>
+        <geom size="0.012 0.009" pos="0 0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
+
+        <!-- Fore Servo Horn (A) - In rear legs, Fore is at -s/2 -->
+        <body name="RL_fore_horn" pos="-0.0061 0.01915 0">
+          <joint name="RL_fore_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
+          <!-- Fore Pushrod (L_b = 40 mm) -->
+          <body name="RL_fore_rod" pos="0 0 -0.040">
+            <joint name="RL_fore_rod_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.003" mass="0.005" material="pushrod"/>
+            <site name="RL_rod_knee" pos="0 0 -0.040" size="0.003"/>
+          </body>
+        </body>
+
+        <!-- Back Servo Horn (B) - In rear legs, Back is at +s/2 -->
+        <body name="RL_back_horn" pos="0.0061 0.01915 0">
+          <joint name="RL_back_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
+          <!-- Shank Link -->
+          <body name="RL_shank" pos="0 0 -0.040">
+            <joint name="RL_shank_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
+            <site name="RL_shank_knee" pos="0 0 -0.0398" size="0.003"/>
+            <geom name="RL_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
 
-      <!-- Rear Right Leg -->
-      <body name="RR_hip" pos="-0.0638 -0.025 0">
-        <inertial pos="0.0018 -0.0006 0" mass="0.02" diaginertia="0.000005 0.000004 0.000003"/>
-        <joint name="RR_hip_joint" class="abduction"/>
-        <geom mesh="hip_0" material="metal" class="visual" quat="0 0 0 1"/>
-        <geom mesh="hip_1" material="gray" class="visual" quat="0 0 0 1"/>
-        <geom size="0.015 0.007" pos="0 -0.026 0" quat="1 1 0 0" type="cylinder" class="collision"/>
-        <body name="RR_thigh" pos="0 -0.0315 0">
-          <inertial pos="-0.0012 0.007 -0.011" mass="0.025" diaginertia="0.00003 0.00003 0.000005"/>
-          <joint name="RR_thigh_joint" class="back_hip"/>
-          <geom mesh="thigh_mirror_0" material="metal" class="visual"/>
-          <geom mesh="thigh_mirror_1" material="gray" class="visual"/>
-          <geom size="0.035 0.005 0.006" pos="0 0 -0.020" quat="0.707107 0 0.707107 0" type="box" class="collision"/>
-          <body name="RR_calf" pos="0 0 -0.0400">
-            <inertial pos="0.002 0 -0.047" mass="0.015" diaginertia="0.00001 0.00001 0.000001"/>
-            <joint name="RR_calf_joint" class="knee"/>
-            <geom mesh="calf_mirror_0" material="gray" class="visual"/>
-            <geom mesh="calf_mirror_1" material="black" class="visual"/>
-            <geom size="0.004 0.02" pos="0.003 0 -0.02" quat="0.995 0 -0.1 0" type="cylinder" class="collision"/>
-            <geom pos="0 0 -0.0716" mesh="foot" class="visual" material="black"/>
-            <geom name="RR" class="foot"/>
+      <!-- ==================== REAR RIGHT (RR / RH) ==================== -->
+      <body name="RR_hip" pos="-0.0507 -0.0235 0.024">
+        <joint name="RR_wiggle_joint" class="hip_wiggle" axis="-1 0 0"/>
+        <geom size="0.012 0.009" pos="0 -0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
+
+        <!-- Fore Servo Horn (A) -->
+        <body name="RR_fore_horn" pos="-0.0061 -0.01915 0">
+          <joint name="RR_fore_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
+          <!-- Fore Pushrod (L_b = 40 mm) -->
+          <body name="RR_fore_rod" pos="0 0 -0.040">
+            <joint name="RR_fore_rod_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.003" mass="0.005" material="pushrod"/>
+            <site name="RR_rod_knee" pos="0 0 -0.040" size="0.003"/>
+          </body>
+        </body>
+
+        <!-- Back Servo Horn (B) -->
+        <body name="RR_back_horn" pos="0.0061 -0.01915 0">
+          <joint name="RR_back_joint" class="servo_pitch"/>
+          <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
+          <!-- Shank Link -->
+          <body name="RR_shank" pos="0 0 -0.040">
+            <joint name="RR_shank_joint" class="passive_pitch"/>
+            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
+            <site name="RR_shank_knee" pos="0 0 -0.0398" size="0.003"/>
+            <geom name="RR_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
+
     </body>
   </worldbody>
 
-  <!-- Position Servos (Target Angle in radians) -->
+  <!-- Closed-loop 4-bar linkage equality constraints connecting pushrods to shanks -->
+  <equality>
+    <connect site1="FL_rod_knee" site2="FL_shank_knee" solref="0.004 1" solimp="0.95 0.99 0.001"/>
+    <connect site1="FR_rod_knee" site2="FR_shank_knee" solref="0.004 1" solimp="0.95 0.99 0.001"/>
+    <connect site1="RL_rod_knee" site2="RL_shank_knee" solref="0.004 1" solimp="0.95 0.99 0.001"/>
+    <connect site1="RR_rod_knee" site2="RR_shank_knee" solref="0.004 1" solimp="0.95 0.99 0.001"/>
+  </equality>
+
+  <!-- 12 Position Actuators (Matching real WAVEGO Pro 12 serial-bus servos) -->
   <actuator>
-    <position class="abduction" name="FL_hip" joint="FL_hip_joint"/>
-    <position class="hip" name="FL_thigh" joint="FL_thigh_joint"/>
-    <position class="knee" name="FL_calf" joint="FL_calf_joint"/>
-    <position class="abduction" name="FR_hip" joint="FR_hip_joint"/>
-    <position class="hip" name="FR_thigh" joint="FR_thigh_joint"/>
-    <position class="knee" name="FR_calf" joint="FR_calf_joint"/>
-    <position class="abduction" name="RL_hip" joint="RL_hip_joint"/>
-    <position class="hip" name="RL_thigh" joint="RL_thigh_joint"/>
-    <position class="knee" name="RL_calf" joint="RL_calf_joint"/>
-    <position class="abduction" name="RR_hip" joint="RR_hip_joint"/>
-    <position class="hip" name="RR_thigh" joint="RR_thigh_joint"/>
-    <position class="knee" name="RR_calf" joint="RR_calf_joint"/>
+    <position name="FL_fore_act" joint="FL_fore_joint"/>
+    <position name="FL_back_act" joint="FL_back_joint"/>
+    <position name="FL_wiggle_act" joint="FL_wiggle_joint"/>
+
+    <position name="LH_wiggle_act" joint="RL_wiggle_joint"/>
+    <position name="LH_fore_act" joint="RL_fore_joint"/>
+    <position name="LH_back_act" joint="RL_back_joint"/>
+
+    <position name="FR_fore_act" joint="FR_fore_joint"/>
+    <position name="FR_back_act" joint="FR_back_joint"/>
+    <position name="FR_wiggle_act" joint="FR_wiggle_joint"/>
+
+    <position name="RH_wiggle_act" joint="RR_wiggle_joint"/>
+    <position name="RH_fore_act" joint="RR_fore_joint"/>
+    <position name="RH_back_act" joint="RR_back_joint"/>
   </actuator>
 
   <keyframe>
-    <!-- Default standing pose -->
-    <key name="stand" qpos="0 0 0.095 1 0 0 0 0 0.8 -1.6 0 0.8 -1.6 0 0.8 -1.6 0 0.8 -1.6"
-      ctrl="0 0.8 -1.6 0 0.8 -1.6 0 0.8 -1.6 0 0.8 -1.6"/>
+    <!-- Default standing pose computed from authentic BodyCtrl.cpp -->
+    <key name="stand"
+      qpos="0 0 0.085 1 0 0 0  0.06 0.816 -0.57 0.611 -0.26  0.06 0.816 -0.57 0.611 -0.26  0.06 0.442 -0.32 0.987 -0.52  0.06 0.442 -0.32 0.987 -0.52"
+      ctrl="0.816 0.611 0.061 0.061 0.442 0.987 0.816 0.611 0.061 0.061 0.442 0.987"/>
   </keyframe>
 </mujoco>

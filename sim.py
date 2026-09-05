@@ -1,24 +1,22 @@
 """
-WAVEGO Pro MuJoCo Simulation & High-Level Controller Interface
-Ported to match the official Waveshare JSON Command Interface and BodyCtrl.cpp.
+WAVEGO Pro MuJoCo Simulation & High-Level Controller Interface.
+Integrates the authentic closed-loop 4-bar parallel linkage mechanism
+with the official Waveshare BodyCtrl kinematics and JSON command interface.
 """
 
 import math
 import time
+from typing import Dict, Any, Tuple
 import mujoco
 import mujoco.viewer
 import numpy as np
 
-# Official WAVEGO Leg Linkage dimensions (in meters)
-# Scaled from BodyCtrl.cpp
-LINKAGE_A = 0.0400  # Thigh link length (m)
-LINKAGE_CD = 0.0716 # Combined calf/shank length (m)
-
-# Stance parameters from BodyCtrl.cpp (meters)
-STAND_HEIGHT = 0.095    # Height of chassis above ground (m)
-STEP_LIFT = 0.015       # Foot lift height during swing (m)
-EXTENDED_X = 0.025      # Fore-aft stance offset (m)
-EXTENDED_Y = 0.025      # Lateral stance offset (m)
+from wavego_kinematics import (
+    WavegoKinematics,
+    STAND_HEIGHT,
+    WALK_HEIGHT_MIN,
+    WALK_HEIGHT_MAX,
+)
 
 # Command Types from official json_cmd.h
 CMD_STAND_UP = 111
@@ -30,125 +28,78 @@ CMD_SINGLE_LEG_CTRL = 114
 class WavegoSim:
     """
     Simulation wrapper providing the official WAVEGO Pro API
-    running on top of a scaled MuJoCo quadruped model.
+    running on top of the authentic closed-loop 4-bar linkage MuJoCo model.
     """
 
-    def __init__(self, xml_path="models/wavego/scene.xml"):
+    def __init__(self, xml_path: str = "models/wavego/scene.xml"):
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
+        self.kinematics = WavegoKinematics()
 
-        # Reset to default standing keyframe
-        mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
-
-        # Motion state
+        # Motion & Gait State
         self.move_fb = 0.0      # Forward / Backward (-100 to 100)
         self.move_lr = 0.0      # Turn Left / Right (-100 to 100)
         self.walk_cycle = 0.0   # Gait cycle phase [0, 1)
-        self.gait_speed = 1.0   # Cycles per second
+        self.gait_speed = 1.5   # Gait frequency (cycles/second)
         self.stand_h = STAND_HEIGHT
+        self.is_moving = False
 
-        # Actuator names (12 joints)
-        self.actuator_names = [
-            "FL_hip", "FL_thigh", "FL_calf",
-            "FR_hip", "FR_thigh", "FR_calf",
-            "RL_hip", "RL_thigh", "RL_calf",
-            "RR_hip", "RR_thigh", "RR_calf",
-        ]
-        self.actuator_ids = [self.model.actuator(name).id for name in self.actuator_names]
+        # Actuator mapping (12 serial-bus servo actuators)
+        self.actuator_names = [self.model.actuator(i).name for i in range(self.model.nu)]
 
-    def single_leg_ik(self, x, y, z, leg_idx):
+        # Initialize to standing pose
+        stand_deg = self.kinematics.stand(self.stand_h)
+        stand_rad = self.kinematics.get_joint_angles_rad(stand_deg)
+        self.data.ctrl[:] = stand_rad
+
+        # Settle physics for 200 steps
+        for _ in range(200):
+            mujoco.mj_step(self.model, self.data)
+
+    def update_gait(self, dt: float):
         """
-        Inverse Kinematics for a 3-DOF leg.
-        x: forward/backward, y: lateral (outward positive), z: downward distance
-        leg_idx: 0=FL, 1=FR, 2=RL, 3=RR
+        Updates joint position setpoints using authentic Waveshare gait generation.
+        Uses triangular gait with dynamic center-of-mass shift during walking,
+        and kinematic standing pose when idle.
         """
-        # Abduction / hip roll angle
-        # Positive angle swings outward
-        hip_sign = 1.0 if leg_idx in [0, 2] else -1.0
-        hip = math.atan2(y * hip_sign, z)
+        self.is_moving = abs(self.move_fb) > 2.0 or abs(self.move_lr) > 2.0
 
-        effective_z = math.sqrt(y**2 + z**2)
-        r = math.sqrt(x**2 + effective_z**2)
-        l1 = LINKAGE_A
-        l2 = LINKAGE_CD
+        if self.is_moving:
+            # Advance gait cycle
+            # Speed scales with move_fb magnitude
+            speed_factor = max(abs(self.move_fb), abs(self.move_lr)) / 50.0
+            speed_factor = min(max(speed_factor, 0.5), 2.0)
+            self.walk_cycle = (self.walk_cycle + self.gait_speed * speed_factor * dt) % 1.0
 
-        # Clamp reach to physical kinematics bounds
-        r = min(max(r, 0.03), (l1 + l2) * 0.98)
+            # Determine turning command (-1: left, 1: right, 0: straight)
+            if self.move_lr > 15.0:
+                turn_cmd = 1
+            elif self.move_lr < -15.0:
+                turn_cmd = -1
+            else:
+                turn_cmd = 0
 
-        # Calf / knee angle (law of cosines)
-        cos_knee = (l1**2 + l2**2 - r**2) / (2 * l1 * l2)
-        cos_knee = min(max(cos_knee, -1.0), 1.0)
-        knee_angle = -(math.pi - math.acos(cos_knee))
+            # Direction angle (0 = forward, 180 = backward)
+            dir_angle = 0.0 if self.move_fb >= 0.0 else 180.0
 
-        # Thigh pitch angle
-        alpha = math.atan2(x, effective_z)
-        cos_thigh = (l1**2 + r**2 - l2**2) / (2 * l1 * r)
-        cos_thigh = min(max(cos_thigh, -1.0), 1.0)
-        thigh_angle = alpha + math.acos(cos_thigh)
-
-        return hip, thigh_angle, knee_angle
-
-    def update_gait(self, dt):
-        """Generates stable 4-beat crawl/trot gait."""
-        is_moving = abs(self.move_fb) > 1.0 or abs(self.move_lr) > 1.0
-
-        if is_moving:
-            self.walk_cycle = (self.walk_cycle + self.gait_speed * dt) % 1.0
+            goal_deg = self.kinematics.triangular_gait(
+                self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
+            )
         else:
             self.walk_cycle = 0.0
+            goal_deg = self.kinematics.stand(self.stand_h)
 
-        # Leg phase offsets (crawl gait: each leg lifts in quarter-cycle turn)
-        # 0: FL, 1: FR, 2: RL, 3: RR
-        leg_phases = [
-            (self.walk_cycle + 0.00) % 1.0,  # FL
-            (self.walk_cycle + 0.50) % 1.0,  # FR
-            (self.walk_cycle + 0.75) % 1.0,  # RL
-            (self.walk_cycle + 0.25) % 1.0,  # RR
-        ]
+        goal_rad = self.kinematics.get_joint_angles_rad(goal_deg)
+        self.data.ctrl[:] = goal_rad
 
-        stride = (self.move_fb / 100.0) * 0.035
-        turn_stride = (self.move_lr / 100.0) * 0.020
-
-        # Base nominal foot positions with wide stance
-        base_offsets = [
-            ( EXTENDED_X, EXTENDED_Y),   # FL
-            ( EXTENDED_X, -EXTENDED_Y),  # FR
-            (-EXTENDED_X, EXTENDED_Y),   # RL
-            (-EXTENDED_X, -EXTENDED_Y),  # RR
-        ]
-
-        leg_targets = []
-        for i, phase in enumerate(leg_phases):
-            base_x, base_y = base_offsets[i]
-            turn_dir = 1.0 if i in [0, 2] else -1.0
-
-            # Foot trajectory
-            if is_moving and phase < 0.25:
-                # Swing phase: foot lifts and reaches forward
-                swing_prog = phase / 0.25
-                x = base_x + (stride + turn_stride * turn_dir) * (swing_prog - 0.5)
-                z = self.stand_h - STEP_LIFT * math.sin(math.pi * swing_prog)
-            else:
-                # Stance phase: foot pushes ground backward
-                stance_prog = (phase - 0.25) / 0.75 if is_moving else 0.5
-                x = base_x - (stride + turn_stride * turn_dir) * (stance_prog - 0.5)
-                z = self.stand_h
-
-            y = abs(base_y)
-            hip, thigh, calf = self.single_leg_ik(x, y, z, i)
-            leg_targets.extend([hip, thigh, calf])
-
-        for act_id, target in zip(self.actuator_ids, leg_targets):
-            self.data.ctrl[act_id] = target
-
-    def step(self, dt=None):
-        """Advances physics by one timestep."""
+    def step(self, dt: float = None):
+        """Advances physics and kinematics by one timestep."""
         if dt is None:
             dt = self.model.opt.timestep
         self.update_gait(dt)
         mujoco.mj_step(self.model, self.data)
 
-    def send_cmd(self, cmd_dict):
+    def send_cmd(self, cmd_dict: Dict[str, Any]):
         """
         Official WAVEGO JSON Command Handler.
         Directly compatible with ESP32 firmware commands.
@@ -166,20 +117,22 @@ class WavegoSim:
 
         elif cmd_type == CMD_BASIC_FUNC:
             func = cmd_dict.get("func", 0)
-            if func == 1:  # Stay low
-                self.stand_h = 0.065
+            if func == 1:  # Stay low / crouch
+                self.stand_h = 75.0
                 self.move_fb = 0.0
                 self.move_lr = 0.0
             elif func == 5:  # Return normal stand
                 self.stand_h = STAND_HEIGHT
+                self.move_fb = 0.0
+                self.move_lr = 0.0
 
     # High-level convenience methods for GenAI task planners
     def stand(self):
         """Commands robot to stand in stable stance."""
         self.send_cmd({"T": CMD_STAND_UP})
 
-    def walk(self, fb=50, lr=0):
-        """Commands robot to walk (fb: forward/backward, lr: turn)."""
+    def walk(self, fb: float = 50.0, lr: float = 0.0):
+        """Commands robot to walk (fb: forward/backward, lr: turn left/right)."""
         self.send_cmd({"T": CMD_BASIC_MOVE, "FB": fb, "LR": lr})
 
     def stop(self):
@@ -190,13 +143,13 @@ class WavegoSim:
         """Commands robot to crouch low."""
         self.send_cmd({"T": CMD_BASIC_FUNC, "func": 1})
 
-    def get_pose(self):
+    def get_pose(self) -> Tuple[np.ndarray, np.ndarray]:
         """Returns (x, y, z) position and orientation quaternion."""
         pos = self.data.qpos[0:3].copy()
         quat = self.data.qpos[3:7].copy()
         return pos, quat
 
-    def launch_viewer(self, target_fps=30):
+    def launch_viewer(self, target_fps: int = 30):
         """
         Launches an interactive 3D visualizer window with decoupled physics
         and rendering to keep CPU/GPU utilization low.
@@ -206,20 +159,16 @@ class WavegoSim:
         last_render_time = time.time()
 
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
-            # Turn off shadows in viewer flags for extra performance
             viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
 
             while viewer.is_running():
                 now = time.time()
-                # Run physics step
                 self.step()
 
-                # Only render and sync display at target_fps (default 30 FPS)
                 if now - last_render_time >= render_interval:
                     viewer.sync()
                     last_render_time = now
 
-                # Sleep to maintain wall-clock real-time speed
                 elapsed = time.time() - now
                 sleep_time = sim_dt - elapsed
                 if sleep_time > 0:
