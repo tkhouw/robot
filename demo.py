@@ -4,7 +4,7 @@ Run this script with:
     uv run python demo.py
 """
 
-from wavego_sim import WavegoSim
+from sim import WavegoSim
 
 if __name__ == "__main__":
     print("Launching WAVEGO Pro MuJoCo Simulation...")
@@ -15,5 +15,5 @@ if __name__ == "__main__":
     print("Press ESC or close the viewer window to exit.")
 
     robot = WavegoSim()
-    robot.stand()
+    robot.walk(fb=1000)
     robot.launch_viewer()
