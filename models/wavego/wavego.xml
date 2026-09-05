@@ -80,13 +80,12 @@
           <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="FL_shank" pos="0 0 -0.040">
             <joint name="FL_shank_joint" class="passive_pitch"/>
-            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
-            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <!-- Upper shank through Knee vertex extending 7.2 mm straight past diamond -->
+            <geom type="capsule" fromto="0 0 0  0.0405 0 -0.0237" size="0.004" mass="0.007" material="shank"/>
             <site name="FL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
-            <geom name="FL_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Single straight foot segment with a single bend angle -->
+            <geom type="capsule" fromto="0.0405 0 -0.0237  0.0376 0 -0.0544" size="0.004" mass="0.005" material="shank"/>
+            <geom name="FL_foot" pos="0.0376 0 -0.0544" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -115,13 +114,12 @@
           <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="FR_shank" pos="0 0 -0.040">
             <joint name="FR_shank_joint" class="passive_pitch"/>
-            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
-            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <!-- Upper shank through Knee vertex extending 7.2 mm straight past diamond -->
+            <geom type="capsule" fromto="0 0 0  0.0405 0 -0.0237" size="0.004" mass="0.007" material="shank"/>
             <site name="FR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
-            <geom name="FR_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Single straight foot segment with a single bend angle -->
+            <geom type="capsule" fromto="0.0405 0 -0.0237  0.0376 0 -0.0544" size="0.004" mass="0.005" material="shank"/>
+            <geom name="FR_foot" pos="0.0376 0 -0.0544" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -150,13 +148,12 @@
           <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="RL_shank" pos="0 0 -0.040">
             <joint name="RL_shank_joint" class="passive_pitch"/>
-            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
-            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <!-- Upper shank through Knee vertex extending 7.2 mm straight past diamond -->
+            <geom type="capsule" fromto="0 0 0  0.0405 0 -0.0237" size="0.004" mass="0.007" material="shank"/>
             <site name="RL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
-            <geom name="RL_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Single straight foot segment with a single bend angle -->
+            <geom type="capsule" fromto="0.0405 0 -0.0237  0.0376 0 -0.0544" size="0.004" mass="0.005" material="shank"/>
+            <geom name="RL_foot" pos="0.0376 0 -0.0544" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -185,13 +182,12 @@
           <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="RR_shank" pos="0 0 -0.040">
             <joint name="RR_shank_joint" class="passive_pitch"/>
-            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
-            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <!-- Upper shank through Knee vertex extending 7.2 mm straight past diamond -->
+            <geom type="capsule" fromto="0 0 0  0.0405 0 -0.0237" size="0.004" mass="0.007" material="shank"/>
             <site name="RR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
-            <!-- Rigid foot bending backward directly from Knee vertex (115 deg included angle) -->
-            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0335 0 -0.0355" size="0.004" mass="0.003" material="shank"/>
-            <geom type="capsule" fromto="0.0335 0 -0.0355  0.0314 0 -0.0507" size="0.004" mass="0.003" material="shank"/>
-            <geom name="RR_foot" pos="0.0314 0 -0.0507" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Single straight foot segment with a single bend angle -->
+            <geom type="capsule" fromto="0.0405 0 -0.0237  0.0376 0 -0.0544" size="0.004" mass="0.005" material="shank"/>
+            <geom name="RR_foot" pos="0.0376 0 -0.0544" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -227,9 +223,9 @@
   </actuator>
 
   <keyframe>
-    <!-- Default standing pose with authentic CAD diamond legs (<>) and 115 deg foot bend -->
+    <!-- Default standing pose with authentic CAD diamond legs (<>) and single-angle foot -->
     <key name="stand"
-      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.7614 1.7813 0.7746 -0.7489  0.0 -0.7614 1.7814 0.7746 -0.7490  0.0 -0.7616 1.7814 0.7744 -0.7489  0.0 -0.7617 1.7815 0.7744 -0.7490"
+      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.8155 1.9027 0.8120 -0.8560  0.0 -0.8155 1.9027 0.8120 -0.8560  0.0 -0.8156 1.9028 0.8120 -0.8561  0.0 -0.8156 1.9029 0.8121 -0.8562"
       ctrl="-0.600 0.600 0.0  0.0 -0.600 0.600  -0.600 0.600 0.0  0.0 -0.600 0.600"/>
   </keyframe>
 </mujoco>
