@@ -196,13 +196,31 @@ class WavegoSim:
         quat = self.data.qpos[3:7].copy()
         return pos, quat
 
-    def launch_viewer(self):
-        """Launches an interactive 3D visualizer window."""
+    def launch_viewer(self, target_fps=30):
+        """
+        Launches an interactive 3D visualizer window with decoupled physics
+        and rendering to keep CPU/GPU utilization low.
+        """
+        render_interval = 1.0 / target_fps
+        sim_dt = self.model.opt.timestep
+        last_render_time = time.time()
+
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
+            # Turn off shadows in viewer flags for extra performance
+            viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+
             while viewer.is_running():
-                step_start = time.time()
+                now = time.time()
+                # Run physics step
                 self.step()
-                viewer.sync()
-                dt_rem = self.model.opt.timestep - (time.time() - step_start)
-                if dt_rem > 0:
-                    time.sleep(dt_rem)
+
+                # Only render and sync display at target_fps (default 30 FPS)
+                if now - last_render_time >= render_interval:
+                    viewer.sync()
+                    last_render_time = now
+
+                # Sleep to maintain wall-clock real-time speed
+                elapsed = time.time() - now
+                sleep_time = sim_dt - elapsed
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
