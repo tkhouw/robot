@@ -15,5 +15,5 @@ if __name__ == "__main__":
     print("Press ESC or close the viewer window to exit.")
 
     robot = WavegoSim()
-    robot.walk(fb=50)
+    robot.stand()
     robot.launch_viewer()

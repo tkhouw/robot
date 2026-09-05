@@ -47,13 +47,17 @@ class WavegoSim:
         # Actuator mapping (12 serial-bus servo actuators)
         self.actuator_names = [self.model.actuator(i).name for i in range(self.model.nu)]
 
-        # Initialize to standing pose
-        stand_deg = self.kinematics.stand(self.stand_h)
-        stand_rad = self.kinematics.get_joint_angles_rad(stand_deg)
-        self.data.ctrl[:] = stand_rad
+        # Initialize directly to precomputed standing keyframe
+        if self.model.nkey > 0:
+            mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
+            self.data.ctrl[:] = self.model.key_ctrl[0]
+        else:
+            stand_deg = self.kinematics.stand(self.stand_h)
+            stand_rad = self.kinematics.get_joint_angles_rad(stand_deg)
+            self.data.ctrl[:] = stand_rad
 
-        # Settle physics for 200 steps
-        for _ in range(200):
+        # Settle physics for 50 steps
+        for _ in range(50):
             mujoco.mj_step(self.model, self.data)
 
     def update_gait(self, dt: float):
@@ -87,7 +91,11 @@ class WavegoSim:
             )
         else:
             self.walk_cycle = 0.0
-            goal_deg = self.kinematics.stand(self.stand_h)
+            if self.model.nkey > 0:
+                self.data.ctrl[:] = self.model.key_ctrl[0]
+                return
+            else:
+                goal_deg = self.kinematics.stand(self.stand_h)
 
         goal_rad = self.kinematics.get_joint_angles_rad(goal_deg)
         self.data.ctrl[:] = goal_rad

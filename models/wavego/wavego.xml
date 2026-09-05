@@ -9,7 +9,7 @@
     <default class="wavego">
       <geom friction="1.2 0.02 0.01" margin="0.001" condim="3"/>
       <joint damping="0.02" armature="0.001" frictionloss="0.01"/>
-      <position kp="15.0" kv="0.6" inheritrange="1"/>
+      <position kp="60.0" kv="1.5" inheritrange="1"/>
       <default class="hip_wiggle">
         <joint axis="1 0 0" range="-0.8 0.8"/>
       </default>
@@ -77,12 +77,16 @@
         <body name="FL_back_horn" pos="-0.0061 0.01915 0">
           <joint name="FL_back_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
-          <!-- Shank Link (L_c = 39.8 mm, L_d = 31.8 mm, L_cd = 71.6 mm) -->
+          <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="FL_shank" pos="0 0 -0.040">
             <joint name="FL_shank_joint" class="passive_pitch"/>
-            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
-            <site name="FL_shank_knee" pos="0 0 -0.0398" size="0.003"/>
-            <geom name="FL_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
+            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <site name="FL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
+            <!-- Rigid foot bending backward directly from Knee vertex -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
+            <geom name="FL_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -108,12 +112,16 @@
         <body name="FR_back_horn" pos="-0.0061 -0.01915 0">
           <joint name="FR_back_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
-          <!-- Shank Link -->
+          <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="FR_shank" pos="0 0 -0.040">
             <joint name="FR_shank_joint" class="passive_pitch"/>
-            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
-            <site name="FR_shank_knee" pos="0 0 -0.0398" size="0.003"/>
-            <geom name="FR_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
+            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <site name="FR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
+            <!-- Rigid foot bending backward directly from Knee vertex -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
+            <geom name="FR_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -123,8 +131,8 @@
         <joint name="RL_wiggle_joint" class="hip_wiggle" axis="1 0 0"/>
         <geom size="0.012 0.009" pos="0 0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
-        <!-- Fore Servo Horn (A) - In rear legs, Fore is at -s/2 -->
-        <body name="RL_fore_horn" pos="-0.0061 0.01915 0">
+        <!-- Fore Servo Horn (A) - at +s/2 (front horn) -->
+        <body name="RL_fore_horn" pos="0.0061 0.01915 0">
           <joint name="RL_fore_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
           <!-- Fore Pushrod (L_b = 40 mm) -->
@@ -135,16 +143,20 @@
           </body>
         </body>
 
-        <!-- Back Servo Horn (B) - In rear legs, Back is at +s/2 -->
-        <body name="RL_back_horn" pos="0.0061 0.01915 0">
+        <!-- Back Servo Horn (B) - at -s/2 (rear horn) -->
+        <body name="RL_back_horn" pos="-0.0061 0.01915 0">
           <joint name="RL_back_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
-          <!-- Shank Link -->
+          <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="RL_shank" pos="0 0 -0.040">
             <joint name="RL_shank_joint" class="passive_pitch"/>
-            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
-            <site name="RL_shank_knee" pos="0 0 -0.0398" size="0.003"/>
-            <geom name="RL_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
+            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <site name="RL_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
+            <!-- Rigid foot bending backward directly from Knee vertex -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
+            <geom name="RL_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -154,8 +166,8 @@
         <joint name="RR_wiggle_joint" class="hip_wiggle" axis="-1 0 0"/>
         <geom size="0.012 0.009" pos="0 -0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
-        <!-- Fore Servo Horn (A) -->
-        <body name="RR_fore_horn" pos="-0.0061 -0.01915 0">
+        <!-- Fore Servo Horn (A) - at +s/2 (front horn) -->
+        <body name="RR_fore_horn" pos="0.0061 -0.01915 0">
           <joint name="RR_fore_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_fore"/>
           <!-- Fore Pushrod (L_b = 40 mm) -->
@@ -166,16 +178,20 @@
           </body>
         </body>
 
-        <!-- Back Servo Horn (B) -->
-        <body name="RR_back_horn" pos="0.0061 -0.01915 0">
+        <!-- Back Servo Horn (B) - at -s/2 (rear horn) -->
+        <body name="RR_back_horn" pos="-0.0061 -0.01915 0">
           <joint name="RR_back_joint" class="servo_pitch"/>
           <geom type="capsule" fromto="0 0 0 0 0 -0.040" size="0.004" mass="0.008" material="horn_back"/>
-          <!-- Shank Link -->
+          <!-- Shank Link & Backward-Curving Foot (<>-) -->
           <body name="RR_shank" pos="0 0 -0.040">
             <joint name="RR_shank_joint" class="passive_pitch"/>
-            <geom type="capsule" fromto="0 0 0 0 0 -0.0716" size="0.004" mass="0.012" material="shank"/>
-            <site name="RR_shank_knee" pos="0 0 -0.0398" size="0.003"/>
-            <geom name="RR_foot" pos="0 0 -0.0716" type="sphere" mass="0.004" class="foot_geom"/>
+            <!-- Upper shank to Knee (L_c = 39.8 mm, lower vertex of diamond) -->
+            <geom type="capsule" fromto="0 0 0  0.0343 0 -0.0201" size="0.004" mass="0.006" material="shank"/>
+            <site name="RR_shank_knee" pos="0.0343 0 -0.0201" size="0.003"/>
+            <!-- Rigid foot bending backward directly from Knee vertex -->
+            <geom type="capsule" fromto="0.0343 0 -0.0201  0.0440 0 -0.0350" size="0.004" mass="0.003" material="shank"/>
+            <geom type="capsule" fromto="0.0440 0 -0.0350  0.0520 0 -0.0520" size="0.004" mass="0.003" material="shank"/>
+            <geom name="RR_foot" pos="0.0520 0 -0.0520" type="sphere" mass="0.004" class="foot_geom"/>
           </body>
         </body>
       </body>
@@ -211,9 +227,9 @@
   </actuator>
 
   <keyframe>
-    <!-- Default standing pose computed from authentic BodyCtrl.cpp -->
+    <!-- Default standing pose with true opposite-bending diamond legs (<>) -->
     <key name="stand"
-      qpos="0 0 0.085 1 0 0 0  0.06 0.816 -0.57 0.611 -0.26  0.06 0.816 -0.57 0.611 -0.26  0.06 0.442 -0.32 0.987 -0.52  0.06 0.442 -0.32 0.987 -0.52"
-      ctrl="0.816 0.611 0.061 0.061 0.442 0.987 0.816 0.611 0.061 0.061 0.442 0.987"/>
+      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.7711 1.8267 0.8045 -0.7983  0.0 -0.7711 1.8267 0.8045 -0.7983  0.0 -0.7711 1.8268 0.8046 -0.7984  0.0 -0.7711 1.8269 0.8046 -0.7984"
+      ctrl="-0.600 0.600 0.0  0.0 -0.600 0.600  -0.600 0.600 0.0  0.0 -0.600 0.600"/>
   </keyframe>
 </mujoco>
