@@ -57,7 +57,7 @@
       <site name="imu" pos="0 0 0.02"/>
 
       <!-- ==================== FRONT LEFT (LF) ==================== -->
-      <body name="FL_hip" pos="0.0493 0.0285 0.024">
+      <body name="FL_hip" pos="0.0493 0.0285 0.006">
         <joint name="FL_wiggle_joint" class="hip_wiggle" axis="1 0 0"/>
         <geom size="0.012 0.009" pos="0 0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
@@ -91,7 +91,7 @@
       </body>
 
       <!-- ==================== FRONT RIGHT (FR) ==================== -->
-      <body name="FR_hip" pos="0.0493 -0.0235 0.024">
+      <body name="FR_hip" pos="0.0493 -0.0235 0.006">
         <joint name="FR_wiggle_joint" class="hip_wiggle" axis="-1 0 0"/>
         <geom size="0.012 0.009" pos="0 -0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
@@ -125,7 +125,7 @@
       </body>
 
       <!-- ==================== REAR LEFT (RL / LH) ==================== -->
-      <body name="RL_hip" pos="-0.0507 0.0285 0.024">
+      <body name="RL_hip" pos="-0.0507 0.0285 0.006">
         <joint name="RL_wiggle_joint" class="hip_wiggle" axis="1 0 0"/>
         <geom size="0.012 0.009" pos="0 0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
@@ -159,7 +159,7 @@
       </body>
 
       <!-- ==================== REAR RIGHT (RR / RH) ==================== -->
-      <body name="RR_hip" pos="-0.0507 -0.0235 0.024">
+      <body name="RR_hip" pos="-0.0507 -0.0235 0.006">
         <joint name="RR_wiggle_joint" class="hip_wiggle" axis="-1 0 0"/>
         <geom size="0.012 0.009" pos="0 -0.0095 0" type="cylinder" mass="0.02" material="servo_case"/>
 
@@ -225,7 +225,7 @@
   <keyframe>
     <!-- Default standing pose with squashed diamond legs (<>) and perpendicular feet -->
     <key name="stand"
-      qpos="0.0 0.0 0.055 1.0 0.0 0.0 0.0  0.0 -0.8068 2.1652 1.0413 -1.1506  0.0 -0.8067 2.1652 1.0414 -1.1506  0.0 -0.8064 2.1649 1.0414 -1.1503  0.0 -0.8064 2.1649 1.0415 -1.1503"
+      qpos="0.0 0.0 0.079 1.0 0.0 0.0 0.0  0.0 -0.8068 2.1652 1.0413 -1.1506  0.0 -0.8067 2.1652 1.0414 -1.1506  0.0 -0.8064 2.1649 1.0414 -1.1503  0.0 -0.8064 2.1649 1.0415 -1.1503"
       ctrl="-0.700 0.900 0.0  0.0 -0.700 0.900  -0.700 0.900 0.0  0.0 -0.700 0.900"/>
   </keyframe>
 </mujoco>
