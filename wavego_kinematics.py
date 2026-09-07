@@ -361,7 +361,25 @@ class WavegoKinematics:
         return list(self.goal_angles)
 
     def get_joint_angles_rad(self, angles_deg: List[float] = None) -> List[float]:
-        """Converts degrees to radians for all 12 joints."""
+        """
+        Converts degrees to radians for all 12 joints, applying physical servo directions
+        matching official Waveshare ServoDirection and MuJoCo joint rotation axes:
+        - Fore horn pitch (indices 0, 4, 6, 10): negative radian (rotates forward)
+        - Back horn pitch (indices 1, 5, 7, 11): positive radian (rotates backward)
+        - Hip wiggle roll (indices 2, 3, 8, 9): negative radian (outward abduction)
+        """
         if angles_deg is None:
             angles_deg = self.goal_angles
-        return [a * math.pi / 180.0 for a in angles_deg]
+
+        rad_list = [0.0] * 12
+        # Fore horn pitch joints: rotate forward in MuJoCo
+        for i in [0, 4, 6, 10]:
+            rad_list[i] = -angles_deg[i] * math.pi / 180.0
+        # Back horn pitch joints: rotate backward in MuJoCo
+        for i in [1, 5, 7, 11]:
+            rad_list[i] = angles_deg[i] * math.pi / 180.0
+        # Hip wiggle roll joints: outward abduction
+        for i in [2, 3, 8, 9]:
+            rad_list[i] = -angles_deg[i] * math.pi / 180.0
+
+        return rad_list

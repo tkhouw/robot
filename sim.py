@@ -86,7 +86,8 @@ class WavegoSim:
             # Direction angle (0 = forward, 180 = backward)
             dir_angle = 0.0 if self.move_fb >= 0.0 else 180.0
 
-            goal_deg = self.kinematics.triangular_gait(
+            # Use authentic Waveshare default gait (GAIT_TYPE = 0: simpleGait)
+            goal_deg = self.kinematics.simple_gait(
                 self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
             )
         else:

@@ -203,6 +203,18 @@
     <connect site1="RR_rod_knee" site2="RR_shank_knee" solref="0.004 1" solimp="0.95 0.99 0.001"/>
   </equality>
 
+  <!-- Exclude internal self-collisions between linkage components connected at knee pivots -->
+  <contact>
+    <exclude body1="FL_fore_rod" body2="FL_shank"/>
+    <exclude body1="FL_fore_horn" body2="FL_shank"/>
+    <exclude body1="FR_fore_rod" body2="FR_shank"/>
+    <exclude body1="FR_fore_horn" body2="FR_shank"/>
+    <exclude body1="RL_fore_rod" body2="RL_shank"/>
+    <exclude body1="RL_fore_horn" body2="RL_shank"/>
+    <exclude body1="RR_fore_rod" body2="RR_shank"/>
+    <exclude body1="RR_fore_horn" body2="RR_shank"/>
+  </contact>
+
   <!-- 12 Position Actuators (Matching real WAVEGO Pro 12 serial-bus servos) -->
   <actuator>
     <position name="FL_fore_act" joint="FL_fore_joint"/>
