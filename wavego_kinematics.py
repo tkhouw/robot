@@ -378,8 +378,8 @@ class WavegoKinematics:
         # Back horn pitch joints: rotate backward in MuJoCo
         for i in [1, 5, 7, 11]:
             rad_list[i] = angles_deg[i] * math.pi / 180.0
-        # Hip wiggle roll joints: outward abduction
+        # Hip wiggle roll joints: outward abduction (+radian rotates outward for both left and right frames)
         for i in [2, 3, 8, 9]:
-            rad_list[i] = -angles_deg[i] * math.pi / 180.0
+            rad_list[i] = angles_deg[i] * math.pi / 180.0
 
         return rad_list

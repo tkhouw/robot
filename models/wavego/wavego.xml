@@ -6,10 +6,10 @@
   <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="100"/>
 
   <default>
+    <position kp="60.0" kv="1.5" inheritrange="1"/>
     <default class="wavego">
       <geom friction="1.2 0.02 0.01" margin="0.001" condim="3"/>
       <joint damping="0.02" armature="0.001" frictionloss="0.01"/>
-      <position kp="60.0" kv="1.5" inheritrange="1"/>
       <default class="hip_wiggle">
         <joint axis="1 0 0" range="-0.8 0.8"/>
       </default>
@@ -237,7 +237,7 @@
   <keyframe>
     <!-- Default standing pose with squashed diamond legs (<>) and perpendicular feet -->
     <key name="stand"
-      qpos="0.0 0.0 0.079 1.0 0.0 0.0 0.0  0.0 -0.8068 2.1652 1.0413 -1.1506  0.0 -0.8067 2.1652 1.0414 -1.1506  0.0 -0.8064 2.1649 1.0414 -1.1503  0.0 -0.8064 2.1649 1.0415 -1.1503"
-      ctrl="-0.700 0.900 0.0  0.0 -0.700 0.900  -0.700 0.900 0.0  0.0 -0.700 0.900"/>
+      qpos="0.0 0.0 0.065 1.0 0.0 0.0 0.0  0.0 -0.8068 2.1652 1.0413 -1.1506  0.0 -0.8067 2.1652 1.0414 -1.1506  0.0 -0.8064 2.1649 1.0414 -1.1503  0.0 -0.8064 2.1649 1.0415 -1.1503"
+      ctrl="-0.8068 1.0413 0.0  0.0 -0.8064 1.0414  -0.8067 1.0414 0.0  0.0 -0.8064 1.0415"/>
   </keyframe>
 </mujoco>

@@ -56,6 +56,10 @@ class WavegoSim:
             stand_rad = self.kinematics.get_joint_angles_rad(stand_deg)
             self.data.ctrl[:] = stand_rad
 
+        # Initialize filtered control buffer to prevent step discontinuities
+        self.filtered_ctrl = np.array(self.data.ctrl, dtype=np.float64).copy()
+        self.servo_tau = 0.04  # 40ms physical servo mechanical time constant
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -63,8 +67,8 @@ class WavegoSim:
     def update_gait(self, dt: float):
         """
         Updates joint position setpoints using authentic Waveshare gait generation.
-        Uses triangular gait with dynamic center-of-mass shift during walking,
-        and kinematic standing pose when idle.
+        Uses simpleGait (diagonal trot) during walking, and standing pose when idle,
+        with physical servo rate smoothing to prevent discontinuous kicks.
         """
         self.is_moving = abs(self.move_fb) > 2.0 or abs(self.move_lr) > 2.0
 
@@ -90,16 +94,19 @@ class WavegoSim:
             goal_deg = self.kinematics.simple_gait(
                 self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
             )
+            target_rad = np.array(self.kinematics.get_joint_angles_rad(goal_deg))
         else:
             self.walk_cycle = 0.0
             if self.model.nkey > 0:
-                self.data.ctrl[:] = self.model.key_ctrl[0]
-                return
+                target_rad = np.array(self.model.key_ctrl[0])
             else:
                 goal_deg = self.kinematics.stand(self.stand_h)
+                target_rad = np.array(self.kinematics.get_joint_angles_rad(goal_deg))
 
-        goal_rad = self.kinematics.get_joint_angles_rad(goal_deg)
-        self.data.ctrl[:] = goal_rad
+        # Smooth servo command interpolation (matches physical bus servo velocity profile)
+        alpha = dt / (dt + self.servo_tau)
+        self.filtered_ctrl += alpha * (target_rad - self.filtered_ctrl)
+        self.data.ctrl[:] = self.filtered_ctrl
 
     def step(self, dt: float = None):
         """Advances physics and kinematics by one timestep."""
