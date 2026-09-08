@@ -72,37 +72,54 @@ This codebase implements **Levels 1 and 2** with mathematical and physical fidel
 
 Most robotic arms are **serial kinematic chains**: joint 1 connects to link 1, which carries joint 2, which carries link 2. Serial chains are simple to calculate, but they have a severe disadvantage for walking robots: **motors are heavy**. If every joint motor is mounted down on the leg, the leg has high inertia, making fast, agile stepping difficult.
 
-The **WAVEGO Pro** uses an elegant mechanical solution: a **closed-loop 4-bar parallel mechanism**.
+The **WAVEGO Pro** uses an elegant mechanical solution: a **closed-loop 4-bar parallel mechanism** with an angled lower shank and foot.
 
 ```
-                [Chassis Torso]
-                     |
-            [Hip Roll Servo / Wiggle]
-                     |
-        +------------+------------+
-        |                         |
-   (Fore Servo)              (Back Servo)
-     [Horn A]                  [Horn B]
-        \                         /
-         \  (Fore Pushrod)       /  (Shank Linkage)
-          \                     /
-           \                   /
-            O=================O  <-- Knee Pivot Vertex
-             \               /
-              \             /
-               \           /
-                \         /
-                 \       /
-                  +-----+
-                  |Foot |
+                     [Chassis Body]
+                           |
+                 [Hip Roll Servo / Wiggle]
+                           |
+             +-------------+-------------+
+             |   s = 12.2 mm shaft separation
+       (Fore Servo)                (Back Servo)
+        Horn A (l_a)                Horn B (l_a)
+          \                              /
+           \                            /
+         Joint P                      Joint Q
+            \                          /
+             \                        /
+       Pushrod\                      / Upper Shank (l_c)
+        (l_b)  \                    /
+                \                  /
+                 \                /
+                  \              /
+                   \            /
+                    \          /
+                     [Knee Joint]  <-- <equality><connect> closes loop
+                          \
+                           \  Lower Shank (l_d)
+                            \
+                             \  bend angle
+                              +-------------O [Foot Contact Sphere]
+                                Foot segment (l_e)
 ```
+
+#### Linkage Dimensions (Matching Official Firmware & CAD)
+| Parameter | Length | Description |
+| :--- | :--- | :--- |
+| **$s$** | $12.2\text{ mm}$ | Fore-to-Back servo horn shaft separation in hip block |
+| **$l_a$** | $40.0\text{ mm}$ | Servo horn length (both Fore Horn A and Back Horn B) |
+| **$l_b$** | $40.0\text{ mm}$ | Fore pushrod connecting Horn A to the Knee pivot |
+| **$l_c$** | $39.8\text{ mm}$ | Upper shank section forming the rear side of the 4-bar loop |
+| **$l_d$** | $31.8\text{ mm}$ | Lower shank extending past the Knee pivot |
+| **$l_e$** | $30.8\text{ mm}$ | Angled foot segment terminating at the spherical rubber foot |
 
 ### Why a Parallel Diamond?
-1. **Mass Centralization**: Both the `Fore` (front) and `Back` (rear) servo motors are mounted high up inside the hip assembly, close to the robot's center of mass. The lower leg consists only of lightweight aluminum linkages.
+1. **Mass Centralization**: Both the `Fore` (front) and `Back` (rear) servo motors are mounted high up inside the hip assembly, close to the robot's center of mass. The lower leg consists only of lightweight linkages.
 2. **Coordinated Motion**:
    - Rotating both horns in opposite directions ($<>$) expands or squashes the diamond, moving the foot vertically up or down.
    - Rotating both horns in unison sweeps the diamond forwards or backwards.
-3. **Rigidity**: Closed kinematic loops distribute mechanical loads between two parallel linkages rather than concentrating all stress on a single motor shaft.
+3. **Rigidity & Load Sharing**: Closed kinematic loops distribute mechanical ground impact loads across two parallel linkages rather than concentrating all bending torque on a single motor shaft.
 
 Each leg has **3 degrees of freedom (DOF)**:
 1. **Hip Wiggle (Roll)**: Tilts the entire leg outward (abduction) or inward (adduction) to adjust stance width or lean into turns.
