@@ -263,11 +263,12 @@ class WavegoKinematics:
         )
 
     def simple_gait(
-        self, global_input: float, direction_angle: float = 0.0, turn_cmd: int = 0
+        self, global_input: float, direction_angle: float = 0.0, turn_cmd: int = 0, rad: bool = True
     ) -> List[float]:
         """
         Diagonal trot gait.
         Ported from BodyCtrl::simpleGait.
+        Returns joint angles in radians by default (rad=True) or degrees (rad=False).
         """
         group_a = global_input % 1.0
         group_b = (global_input + 0.5) % 1.0
@@ -288,14 +289,15 @@ class WavegoKinematics:
             self.single_gait_ctrl(2, 1.5, group_b,  90.0, -self.walk_extended_x, self.walk_extended_z)
             self.single_gait_ctrl(3, 1.5, group_b,  90.0,  self.walk_extended_x, self.walk_extended_z)
 
-        return list(self.goal_angles)
+        return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
     def triangular_gait(
-        self, global_input: float, direction_angle: float = 0.0, turn_cmd: int = 0
+        self, global_input: float, direction_angle: float = 0.0, turn_cmd: int = 0, rad: bool = True
     ) -> List[float]:
         """
         4-phase triangular crawl gait with dynamic center-of-mass shift.
         Ported from BodyCtrl::triangularGait.
+        Returns joint angles in radians by default (rad=True) or degrees (rad=False).
         """
         step_b = global_input % 1.0
         step_c = (global_input + 0.25) % 1.0
@@ -336,29 +338,33 @@ class WavegoKinematics:
             self.single_gait_ctrl(2, 1.5, step_b,  90.0, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
             self.single_gait_ctrl(3, 1.5, step_c,  90.0,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
 
-        return list(self.goal_angles)
+        return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
-    def stand(self, height: float = STAND_HEIGHT) -> List[float]:
+    def stand(self, height: float = STAND_HEIGHT, rad: bool = True) -> List[float]:
         """
         Computes 12 servo angles for default standing pose at specified height.
         Ported from BodyCtrl::standUp.
+        Returns joint angles in radians by default (rad=True) or degrees (rad=False).
         """
         self.single_leg_ctrl(1,  self.walk_extended_x, height, self.walk_extended_z)
         self.single_leg_ctrl(2, -self.walk_extended_x, height, self.walk_extended_z)
         self.single_leg_ctrl(3,  self.walk_extended_x, height, self.walk_extended_z)
         self.single_leg_ctrl(4, -self.walk_extended_x, height, self.walk_extended_z)
-        return list(self.goal_angles)
+        return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
-    def stand_mass_center(self, a_input: float, b_input: float, height: float = STAND_HEIGHT) -> List[float]:
+    def stand_mass_center(
+        self, a_input: float, b_input: float, height: float = STAND_HEIGHT, rad: bool = True
+    ) -> List[float]:
         """
         Adjusts center of mass while standing.
         Ported from BodyCtrl::standMassCenter.
+        Returns joint angles in radians by default (rad=True) or degrees (rad=False).
         """
         self.single_leg_ctrl(1,  self.walk_extended_x - a_input, height,  self.walk_extended_z - b_input)
         self.single_leg_ctrl(2, -self.walk_extended_x - a_input, height,  self.walk_extended_z - b_input)
         self.single_leg_ctrl(3,  self.walk_extended_x - a_input, height,  self.walk_extended_z + b_input)
         self.single_leg_ctrl(4, -self.walk_extended_x - a_input, height,  self.walk_extended_z + b_input)
-        return list(self.goal_angles)
+        return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
     def get_joint_angles_rad(self, angles_deg: List[float] = None) -> List[float]:
         """

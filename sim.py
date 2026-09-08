@@ -52,8 +52,7 @@ class WavegoSim:
             mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
             self.data.ctrl[:] = self.model.key_ctrl[0]
         else:
-            stand_deg = self.kinematics.stand(self.stand_h)
-            stand_rad = self.kinematics.get_joint_angles_rad(stand_deg)
+            stand_rad = self.kinematics.stand(self.stand_h)
             self.data.ctrl[:] = stand_rad
 
         # Initialize filtered control buffer to prevent step discontinuities
@@ -91,17 +90,17 @@ class WavegoSim:
             dir_angle = 0.0 if self.move_fb >= 0.0 else 180.0
 
             # Use authentic Waveshare default gait (GAIT_TYPE = 0: simpleGait)
-            goal_deg = self.kinematics.simple_gait(
-                self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
+            target_rad = np.array(
+                self.kinematics.simple_gait(
+                    self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
+                )
             )
-            target_rad = np.array(self.kinematics.get_joint_angles_rad(goal_deg))
         else:
             self.walk_cycle = 0.0
             if self.model.nkey > 0:
                 target_rad = np.array(self.model.key_ctrl[0])
             else:
-                goal_deg = self.kinematics.stand(self.stand_h)
-                target_rad = np.array(self.kinematics.get_joint_angles_rad(goal_deg))
+                target_rad = np.array(self.kinematics.stand(self.stand_h))
 
         # Smooth servo command interpolation (matches physical bus servo velocity profile)
         alpha = dt / (dt + self.servo_tau)
