@@ -6,7 +6,7 @@ with the official Waveshare BodyCtrl kinematics and JSON command interface.
 
 import math
 import time
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -18,17 +18,27 @@ from wavego_kinematics import (
     WALK_HEIGHT_MAX,
 )
 
-# Command Types from official json_cmd.h
-CMD_STAND_UP = 111
-CMD_BASIC_MOVE = 112
-CMD_BASIC_FUNC = 113
-CMD_SINGLE_LEG_CTRL = 114
+from robot_interface import BaseRobot
+from wavego_protocol import (
+    CMD_STAND_UP,
+    CMD_BASIC_MOVE,
+    CMD_BASIC_FUNC,
+    CMD_SINGLE_LEG_CTRL,
+    CMD_STAND_UP_HEIGHT,
+    CMD_CTRL_JOINT_ANGLE,
+    CMD_CTRL_JOINT_RAD,
+    CMD_SET_GAIT_PARAMS,
+    FUNC_STAY_LOW,
+    FUNC_STEADY_OFF,
+    parse_cmd,
+)
 
 
-class WavegoSim:
+class WavegoSim(BaseRobot):
     """
-    Simulation wrapper providing the official WAVEGO Pro API
-    running on top of the authentic closed-loop 4-bar linkage MuJoCo model.
+    MuJoCo Simulation driver providing the official WAVEGO Pro API
+    running on top of the authentic closed-loop 4-bar linkage model.
+    Implements BaseRobot for complete hardware-swappability.
     """
 
     def __init__(self, xml_path: str = "models/wavego/scene.xml"):
@@ -55,7 +65,8 @@ class WavegoSim:
             stand_rad = self.kinematics.stand(self.stand_h)
             self.data.ctrl[:] = stand_rad
 
-        # Initialize filtered control buffer to prevent step discontinuities
+        # Initialize target and filtered control buffers
+        self.target_ctrl = np.array(self.data.ctrl, dtype=np.float64).copy()
         self.filtered_ctrl = np.array(self.data.ctrl, dtype=np.float64).copy()
         self.servo_tau = 0.04  # 40ms physical servo mechanical time constant
 
@@ -66,7 +77,7 @@ class WavegoSim:
     def update_gait(self, dt: float):
         """
         Updates joint position setpoints using authentic Waveshare gait generation.
-        Uses simpleGait (diagonal trot) during walking, and standing pose when idle,
+        Uses simpleGait (diagonal trot) during walking, and target_ctrl when idle,
         with physical servo rate smoothing to prevent discontinuous kicks.
         """
         self.is_moving = abs(self.move_fb) > 2.0 or abs(self.move_lr) > 2.0
@@ -97,10 +108,7 @@ class WavegoSim:
             )
         else:
             self.walk_cycle = 0.0
-            if self.model.nkey > 0:
-                target_rad = np.array(self.model.key_ctrl[0])
-            else:
-                target_rad = np.array(self.kinematics.stand(self.stand_h))
+            target_rad = self.target_ctrl
 
         # Smooth servo command interpolation (matches physical bus servo velocity profile)
         alpha = dt / (dt + self.servo_tau)
@@ -114,17 +122,65 @@ class WavegoSim:
         self.update_gait(dt)
         mujoco.mj_step(self.model, self.data)
 
-    def send_cmd(self, cmd_dict: Dict[str, Any]):
+    def send_cmd(self, cmd: Union[Dict[str, Any], str]):
         """
         Official WAVEGO JSON Command Handler.
         Directly compatible with ESP32 firmware commands.
+        Accepts dict or raw JSON string and immediately executes kinematics.
         """
+        cmd_dict = parse_cmd(cmd)
         cmd_type = cmd_dict.get("T")
 
         if cmd_type == CMD_STAND_UP:
             self.move_fb = 0.0
             self.move_lr = 0.0
             self.stand_h = STAND_HEIGHT
+            # Immediately invoke WavegoKinematics to calculate 12-servo standing pose
+            self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
+
+        elif cmd_type == CMD_STAND_UP_HEIGHT:
+            self.stand_h = float(cmd_dict.get("h", STAND_HEIGHT))
+            self.move_fb = 0.0
+            self.move_lr = 0.0
+            # Immediately invoke WavegoKinematics to calculate variable height pose
+            self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
+
+        elif cmd_type == CMD_SINGLE_LEG_CTRL:
+            # Single foot 3D positioning via closed-form IK: {"T": 113, "leg": 1..4, "x": ..., "y": ..., "z": ...}
+            leg_id = int(cmd_dict.get("leg", 1))
+            x = float(cmd_dict.get("x", 0.0))
+            y = float(cmd_dict.get("y", STAND_HEIGHT))
+            z = float(cmd_dict.get("z", 0.0))
+            self.kinematics.single_leg_ctrl(leg_id, x, y, z)
+            self.target_ctrl[:] = self.kinematics.get_joint_angles_rad()
+
+        elif cmd_type == CMD_CTRL_JOINT_RAD:
+            # Direct single joint radian command: {"T": 109, "joint": 0..11, "rad": ...}
+            joint_idx = int(cmd_dict.get("joint", 0))
+            rad_val = float(cmd_dict.get("rad", 0.0))
+            if 0 <= joint_idx < 12:
+                self.target_ctrl[joint_idx] = rad_val
+
+        elif cmd_type == CMD_CTRL_JOINT_ANGLE:
+            # Direct single joint angle (degrees) command: {"T": 108, "joint": 0..11, "angle": ...}
+            joint_idx = int(cmd_dict.get("joint", 0))
+            angle_val = float(cmd_dict.get("angle", 0.0))
+            if 0 <= joint_idx < 12:
+                self.kinematics.goal_angles[joint_idx] = angle_val
+                self.target_ctrl[:] = self.kinematics.get_joint_angles_rad()
+
+        elif cmd_type == CMD_SET_GAIT_PARAMS:
+            # Set gait parameters: {"T": 116, ...}
+            if "height" in cmd_dict:
+                self.kinematics.walk_height = float(cmd_dict["height"])
+            if "lift" in cmd_dict:
+                self.kinematics.walk_lift = float(cmd_dict["lift"])
+            if "range" in cmd_dict:
+                self.kinematics.walk_range = float(cmd_dict["range"])
+            if "extendedX" in cmd_dict:
+                self.kinematics.walk_extended_x = float(cmd_dict["extendedX"])
+            if "extendedZ" in cmd_dict:
+                self.kinematics.walk_extended_z = float(cmd_dict["extendedZ"])
 
         elif cmd_type == CMD_BASIC_MOVE:
             self.move_fb = float(cmd_dict.get("FB", 0))
@@ -132,37 +188,44 @@ class WavegoSim:
 
         elif cmd_type == CMD_BASIC_FUNC:
             func = cmd_dict.get("func", 0)
-            if func == 1:  # Stay low / crouch
+            if func == FUNC_STAY_LOW:  # Stay low / crouch
                 self.stand_h = 75.0
                 self.move_fb = 0.0
                 self.move_lr = 0.0
-            elif func == 5:  # Return normal stand
+                self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
+            elif func == FUNC_STEADY_OFF:  # Return normal stand
                 self.stand_h = STAND_HEIGHT
                 self.move_fb = 0.0
                 self.move_lr = 0.0
-
-    # High-level convenience methods for GenAI task planners
-    def stand(self):
-        """Commands robot to stand in stable stance."""
-        self.send_cmd({"T": CMD_STAND_UP})
-
-    def walk(self, fb: float = 50.0, lr: float = 0.0):
-        """Commands robot to walk (fb: forward/backward, lr: turn left/right)."""
-        self.send_cmd({"T": CMD_BASIC_MOVE, "FB": fb, "LR": lr})
-
-    def stop(self):
-        """Commands robot to stop walking."""
-        self.send_cmd({"T": CMD_BASIC_MOVE, "FB": 0, "LR": 0})
-
-    def crouch(self):
-        """Commands robot to crouch low."""
-        self.send_cmd({"T": CMD_BASIC_FUNC, "func": 1})
+                self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
 
     def get_pose(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Returns (x, y, z) position and orientation quaternion."""
+        """Returns (x, y, z) position and orientation quaternion [w, x, y, z]."""
         pos = self.data.qpos[0:3].copy()
         quat = self.data.qpos[3:7].copy()
         return pos, quat
+
+    def get_imu(self) -> Tuple[float, float, float]:
+        """
+        Returns estimated Euler angles (roll, pitch, yaw) in degrees from quaternion.
+        Matches onboard physical MPU6050 output.
+        """
+        w, x, y, z = self.data.qpos[3:7]
+        # Roll (x-axis rotation)
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+
+        # Pitch (y-axis rotation)
+        sinp = 2 * (w * y - z * x)
+        pitch = math.asin(np.clip(sinp, -1.0, 1.0))
+
+        # Yaw (z-axis rotation)
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+
+        return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
     def launch_viewer(self, target_fps: int = 30):
         """

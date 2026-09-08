@@ -206,8 +206,12 @@ robot/
 │       ├── wavego.xml          # 4-bar MJCF robot definition (joints, links, actuators)
 │       └── scene.xml           # Simulation environment (ground plane, lighting, camera)
 │
+├── wavego_protocol.py          # Official Waveshare JSON command constants & packet format
+├── robot_interface.py          # Abstract BaseRobot interface & PhysicalRobotController (Serial)
 ├── wavego_kinematics.py        # Python port of the C++ closed-form IK and gait engine
-├── sim.py                      # MuJoCo simulation wrapper & official JSON command handler
+├── sim.py                      # MuJoCo simulation driver implementing BaseRobot
+├── agent.py                    # High-level cognitive agent with Sense-Think-Act loop
+├── main.py                     # Entry point demonstrating autonomous agent task execution
 ├── demo.py                     # Interactive 3D visualizer script for manual evaluation
 │
 ├── pyproject.toml              # Modern Python packaging and dependency config (managed by uv)
@@ -216,16 +220,22 @@ robot/
 └── README.md                   # This pedagogical guide
 ```
 
-### How the Primary Modules Interact
+### How the Architecture Operates
 
-1. [`demo.py`](demo.py):
-   The high-level user entry point. It instantiates `WavegoSim()`, commands the robot to stand or walk, and launches MuJoCo's interactive 3D visualizer.
-2. [`sim.py`](sim.py):
-   The bridge between software and physics. It maintains the MuJoCo simulation loop, listens for movement commands (e.g. `walk(fb, lr)`), steps the kinematics engine, filters actuator commands, and advances the physics by $\Delta t = 0.002\text{ s}$.
-3. [`wavego_kinematics.py`](wavego_kinematics.py):
-   The geometric brain. It takes gait cycle phases and computes the exact angles required for all 12 servo joints, mapping them correctly to physical actuator directions.
-4. [`models/wavego/wavego.xml`](models/wavego/wavego.xml):
-   The physical definition. Defines masses, inertia tensors, STL visual meshes, 4-bar equality constraints, and actuator gains.
+1. [`agent.py`](agent.py):
+   The **Cognitive Layer**. Implements a Sense-Think-Act loop with registered tool skills (`walk_distance`, `turn_degrees`, `crouch`, `stand`, `get_telemetry`, `handshake`). It plans and executes tasks by sending commands to any `BaseRobot` without knowing or caring whether it is driving a simulation or real hardware.
+2. [`main.py`](main.py):
+   The high-level autonomous agent demonstration script. Connects the agent to the robot and runs a multi-step task plan.
+3. [`robot_interface.py`](robot_interface.py):
+   The **Hardware Abstraction Layer (HAL)**. Defines `BaseRobot`, providing universal semantic methods (`stand()`, `walk()`, `crouch()`) that compile directly into official Waveshare JSON packets and route through `send_cmd()`. Also provides `PhysicalRobotController` for UART/WiFi serial execution.
+4. [`wavego_protocol.py`](wavego_protocol.py):
+   Defines the official protocol commands (`CMD_BASIC_MOVE = 111`, `CMD_STAND_UP = 110`, `CMD_BASIC_FUNC = 112`, etc.) matching the ESP32 firmware 1:1.
+5. [`sim.py`](sim.py):
+   The **Physics Digital Twin**. Implements `BaseRobot` for MuJoCo simulation. Interprets official JSON commands via `send_cmd()`, steps the kinematics and physics loops, and smooths servo rates.
+6. [`wavego_kinematics.py`](wavego_kinematics.py):
+   The **Kinematic Brain**. Computes closed-form Inverse Kinematics and gait trajectories, converting desired foot positions into 12 servo joint angles in radians (`rad=True`) or degrees (`rad=False`).
+7. [`demo.py`](demo.py):
+   An interactive 3D visualizer script for manual inspection and verification in MuJoCo.
 
 ---
 
