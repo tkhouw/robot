@@ -227,16 +227,17 @@ class WavegoSim(BaseRobot):
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
-    def launch_viewer(self, target_fps: int = 30):
+    def launch_viewer(self, target_fps: int = 30, key_callback=None):
         """
         Launches an interactive 3D visualizer window with decoupled physics
         and rendering to keep CPU/GPU utilization low.
+        Accepts optional key_callback for interactive GLFW key event handling.
         """
         render_interval = 1.0 / target_fps
         sim_dt = self.model.opt.timestep
         last_render_time = time.time()
 
-        with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
+        with mujoco.viewer.launch_passive(self.model, self.data, key_callback=key_callback) as viewer:
             viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
 
             while viewer.is_running():
