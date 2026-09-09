@@ -352,19 +352,113 @@ class WavegoKinematics:
         self.single_leg_ctrl(4, -self.walk_extended_x, height, self.walk_extended_z)
         return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
-    def stand_mass_center(
-        self, a_input: float, b_input: float, height: float = STAND_HEIGHT, rad: bool = True
-    ) -> List[float]:
+    @staticmethod
+    def bessel_ctrl(num_start: float, num_end: float, rate_input: float) -> float:
         """
-        Adjusts center of mass while standing.
-        Ported from BodyCtrl::standMassCenter.
-        Returns joint angles in radians by default (rad=True) or degrees (rad=False).
+        Smooth cosine interpolation between num_start and num_end.
+        Ported directly from BodyCtrl::besselCtrl.
         """
-        self.single_leg_ctrl(1,  self.walk_extended_x - a_input, height,  self.walk_extended_z - b_input)
-        self.single_leg_ctrl(2, -self.walk_extended_x - a_input, height,  self.walk_extended_z - b_input)
-        self.single_leg_ctrl(3,  self.walk_extended_x - a_input, height,  self.walk_extended_z + b_input)
-        self.single_leg_ctrl(4, -self.walk_extended_x - a_input, height,  self.walk_extended_z + b_input)
-        return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
+        return (num_end - num_start) * ((math.cos(rate_input * math.pi - math.pi) + 1.0) / 2.0) + num_start
+
+    def generate_handshake_trajectory(self) -> List[List[float]]:
+        """
+        Generates the complete sequence of 12-joint radian setpoints for the
+        official Waveshare handshake greeting gesture.
+        Ported directly from BodyCtrl::functionHandshake().
+        """
+        trajectory: List[List[float]] = []
+
+        # Phase 1: Sit back onto rear legs, lean body back, and stabilize base
+        for step in range(0, 101, 2):
+            i = step / 100.0
+            self.single_leg_ctrl(
+                1,
+                self.bessel_ctrl(self.walk_extended_x, 0.0, i),
+                self.bessel_ctrl(self.walk_height, self.walk_height_max, i),
+                self.bessel_ctrl(self.walk_extended_z, -15.0, i),
+            )
+            self.single_leg_ctrl(
+                3,
+                self.bessel_ctrl(self.walk_extended_x, 0.0, i),
+                self.bessel_ctrl(self.walk_height, self.walk_height_max, i),
+                self.walk_extended_z,
+            )
+            self.single_leg_ctrl(
+                2,
+                -self.walk_extended_x,
+                self.bessel_ctrl(self.walk_height, self.walk_height_min - 10.0, i),
+                self.bessel_ctrl(self.walk_extended_z, 2.0 * self.walk_extended_z, i),
+            )
+            self.single_leg_ctrl(
+                4,
+                -self.walk_extended_x,
+                self.bessel_ctrl(self.walk_height, self.walk_height_min - 10.0, i),
+                self.bessel_ctrl(self.walk_extended_z, 2.0 * self.walk_extended_z, i),
+            )
+            trajectory.append(self.get_joint_angles_rad())
+
+        # Phase 2: Lift front right paw (Leg 3) up and extend forward
+        for step in range(0, 101, 2):
+            i = step / 100.0
+            self.single_leg_ctrl(
+                3,
+                self.bessel_ctrl(0.0, self.walk_range / 2.0 + self.walk_extended_x, i),
+                self.bessel_ctrl(self.walk_height_max, self.walk_height_min, i),
+                self.bessel_ctrl(self.walk_extended_z, 0.0, i),
+            )
+            trajectory.append(self.get_joint_angles_rad())
+
+        # Phase 3: Paw shake oscillation (3 shakes up and down)
+        for _ in range(3):
+            for step in range(0, 101, 4):
+                i = step / 100.0
+                self.single_leg_ctrl(
+                    3,
+                    self.walk_range / 2.0 + self.walk_extended_x,
+                    self.bessel_ctrl(self.walk_height_min, self.walk_height_min + 30.0, i),
+                    0.0,
+                )
+                trajectory.append(self.get_joint_angles_rad())
+            for step in range(0, 101, 4):
+                i = step / 100.0
+                self.single_leg_ctrl(
+                    3,
+                    self.walk_range / 2.0 + self.walk_extended_x,
+                    self.bessel_ctrl(self.walk_height_min + 30.0, self.walk_height_min, i),
+                    0.0,
+                )
+                trajectory.append(self.get_joint_angles_rad())
+
+        # Phase 4: Return paw to ground and restore upright standing stance
+        for step in range(0, 101, 2):
+            i = step / 100.0
+            self.single_leg_ctrl(
+                1,
+                self.bessel_ctrl(0.0, self.walk_extended_x, i),
+                self.bessel_ctrl(self.walk_height_max, self.walk_height, i),
+                self.bessel_ctrl(-15.0, self.walk_extended_z, i),
+            )
+            self.single_leg_ctrl(
+                3,
+                self.bessel_ctrl(self.walk_range / 2.0 + self.walk_extended_x, self.walk_extended_x, i),
+                self.bessel_ctrl(self.walk_height_min, self.walk_height, i),
+                self.bessel_ctrl(0.0, self.walk_extended_z, i),
+            )
+            self.single_leg_ctrl(
+                2,
+                -self.walk_extended_x,
+                self.bessel_ctrl(self.walk_height_min - 10.0, self.walk_height, i),
+                self.bessel_ctrl(2.0 * self.walk_extended_z, self.walk_extended_z, i),
+            )
+            self.single_leg_ctrl(
+                4,
+                -self.walk_extended_x,
+                self.bessel_ctrl(self.walk_height_min - 10.0, self.walk_height, i),
+                self.bessel_ctrl(2.0 * self.walk_extended_z, self.walk_extended_z, i),
+            )
+            trajectory.append(self.get_joint_angles_rad())
+
+        return trajectory
 
     def get_joint_angles_rad(self, angles_deg: List[float] = None) -> List[float]:
         """

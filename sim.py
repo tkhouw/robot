@@ -29,6 +29,7 @@ from wavego_protocol import (
     CMD_CTRL_JOINT_RAD,
     CMD_SET_GAIT_PARAMS,
     FUNC_STAY_LOW,
+    FUNC_HANDSHAKE,
     FUNC_STEADY_OFF,
     parse_cmd,
 )
@@ -70,6 +71,9 @@ class WavegoSim(BaseRobot):
         self.filtered_ctrl = np.array(self.data.ctrl, dtype=np.float64).copy()
         self.servo_tau = 0.04  # 40ms physical servo mechanical time constant
 
+        # Motion queue for sequential gestures (e.g. handshake)
+        self.motion_queue: List[List[float]] = []
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -77,38 +81,44 @@ class WavegoSim(BaseRobot):
     def update_gait(self, dt: float):
         """
         Updates joint position setpoints using authentic Waveshare gait generation.
-        Uses simpleGait (diagonal trot) during walking, and target_ctrl when idle,
-        with physical servo rate smoothing to prevent discontinuous kicks.
+        Uses simpleGait (diagonal trot) during walking, active motion queue for gestures,
+        and target_ctrl when idle, with physical servo rate smoothing to prevent discontinuous kicks.
         """
-        self.is_moving = abs(self.move_fb) > 2.0 or abs(self.move_lr) > 2.0
-
-        if self.is_moving:
-            # Advance gait cycle
-            # Speed scales with move_fb magnitude
-            speed_factor = max(abs(self.move_fb), abs(self.move_lr)) / 50.0
-            speed_factor = min(max(speed_factor, 0.5), 2.0)
-            self.walk_cycle = (self.walk_cycle + self.gait_speed * speed_factor * dt) % 1.0
-
-            # Determine turning command (-1: left, 1: right, 0: straight)
-            if self.move_lr > 15.0:
-                turn_cmd = 1
-            elif self.move_lr < -15.0:
-                turn_cmd = -1
-            else:
-                turn_cmd = 0
-
-            # Direction angle (0 = forward, 180 = backward)
-            dir_angle = 0.0 if self.move_fb >= 0.0 else 180.0
-
-            # Use authentic Waveshare default gait (GAIT_TYPE = 0: simpleGait)
-            target_rad = np.array(
-                self.kinematics.simple_gait(
-                    self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
-                )
-            )
-        else:
+        if self.motion_queue:
             self.walk_cycle = 0.0
+            self.is_moving = False
+            self.target_ctrl[:] = self.motion_queue.pop(0)
             target_rad = self.target_ctrl
+        else:
+            self.is_moving = abs(self.move_fb) > 2.0 or abs(self.move_lr) > 2.0
+
+            if self.is_moving:
+                # Advance gait cycle
+                # Speed scales with move_fb magnitude
+                speed_factor = max(abs(self.move_fb), abs(self.move_lr)) / 50.0
+                speed_factor = min(max(speed_factor, 0.5), 2.0)
+                self.walk_cycle = (self.walk_cycle + self.gait_speed * speed_factor * dt) % 1.0
+
+                # Determine turning command (-1: left, 1: right, 0: straight)
+                if self.move_lr > 15.0:
+                    turn_cmd = 1
+                elif self.move_lr < -15.0:
+                    turn_cmd = -1
+                else:
+                    turn_cmd = 0
+
+                # Direction angle (0 = forward, 180 = backward)
+                dir_angle = 0.0 if self.move_fb >= 0.0 else 180.0
+
+                # Use authentic Waveshare default gait (GAIT_TYPE = 0: simpleGait)
+                target_rad = np.array(
+                    self.kinematics.simple_gait(
+                        self.walk_cycle, direction_angle=dir_angle, turn_cmd=turn_cmd
+                    )
+                )
+            else:
+                self.walk_cycle = 0.0
+                target_rad = self.target_ctrl
 
         # Smooth servo command interpolation (matches physical bus servo velocity profile)
         alpha = dt / (dt + self.servo_tau)
@@ -189,11 +199,25 @@ class WavegoSim(BaseRobot):
         elif cmd_type == CMD_BASIC_FUNC:
             func = cmd_dict.get("func", 0)
             if func == FUNC_STAY_LOW:  # Stay low / crouch
+                self.motion_queue.clear()
                 self.stand_h = 75.0
                 self.move_fb = 0.0
                 self.move_lr = 0.0
                 self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
+            elif func == FUNC_HANDSHAKE:  # Handshake gesture
+                self.move_fb = 0.0
+                self.move_lr = 0.0
+                # Generate and queue the authentic Waveshare handshake sequence
+                traj = self.kinematics.generate_handshake_trajectory()
+                # Upsample/stretch trajectory frames slightly so the motion is smooth at 500 Hz
+                # Each waypoint is held for ~5 physics steps (10ms)
+                stretched_traj = []
+                for wp in traj:
+                    for _ in range(5):
+                        stretched_traj.append(wp)
+                self.motion_queue = stretched_traj
             elif func == FUNC_STEADY_OFF:  # Return normal stand
+                self.motion_queue.clear()
                 self.stand_h = STAND_HEIGHT
                 self.move_fb = 0.0
                 self.move_lr = 0.0
