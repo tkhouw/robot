@@ -32,7 +32,7 @@ event_queue: asyncio.Queue = asyncio.Queue()
 sse_subscribers: List[asyncio.Queue] = []
 
 
-class Event(BaseModel):
+class RobotStimulusEvent(BaseModel):
     source: str  # e.g. "user_phone", "nest_doorbell", "motion_sensor"
     event_type: str  # e.g. "user_message", "doorbell_press", "motion_detected"
     payload: Dict[str, Any] = {}
@@ -49,15 +49,30 @@ async def broadcast_sse(event_type: str, data: Any):
 
 
 async def event_processor_loop():
-    """Background consumer worker processing incoming events sequentially."""
+    """Background consumer worker processing incoming stimulus events sequentially."""
     while True:
         prompt_text = await event_queue.get()
         await broadcast_sse("agent_turn_start", {"prompt": prompt_text})
 
         try:
-            async for step_output in runtime.execute_prompt(prompt_text):
-                await broadcast_sse("agent_step", {"output": step_output})
+            async for adk_event in runtime.execute_prompt(prompt_text):
+                # Serialize the native Google ADK Event into a structured dictionary
+                event_dict = adk_event.model_dump(mode="json", exclude_none=True)
+
+                # Extract human-readable summary for console logging
+                if adk_event.actions and getattr(adk_event.actions, "tool_calls", None):
+                    for tc in adk_event.actions.tool_calls:
+                        print(f"[ADK TOOL CALL]: {tc.name}({tc.args})")
+
+                if adk_event.content and getattr(adk_event.content, "parts", None):
+                    for part in adk_event.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            print(f"[ADK AGENT THOUGHT/RESPONSE]: {part.text}")
+
+                await broadcast_sse("agent_adk_event", event_dict)
+
         except Exception as e:
+            print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})
 
         await broadcast_sse("agent_turn_complete", {"status": "idle"})
@@ -72,7 +87,7 @@ async def startup_event():
 
 
 @app.post("/events")
-async def receive_event(event: Event):
+async def receive_event(event: RobotStimulusEvent):
     """
     Unified ingestion endpoint for all stimuli entering the robot:
     - User conversations & instructions ("user_message")

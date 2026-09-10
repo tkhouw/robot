@@ -1,12 +1,9 @@
-"""
-Google ADK Cognitive Agent for the WAVEGO Pro Quadruped.
-Integrates with OpenRouter (DeepSeek multimodal vision) and provides an agentic reasoning loop.
-"""
-
 import os
 from typing import AsyncGenerator, Optional
 import openai
+import google.genai.types as types
 from google.adk.agents import Agent
+from google.adk.events import Event as AdkEvent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.labs.openai import OpenAILlm
@@ -100,27 +97,30 @@ class QuadrupedCognitiveRuntime:
             agent=self.agent,
             session_service=self.session_service,
         )
+        self.user_id = "wavego_user"
         self.session_id = "default_wavego_session"
 
     async def init_session(self):
         """Initializes the session in the session service."""
         try:
-            await self.session_service.get(self.session_id)
+            await self.session_service.get(session_id=self.session_id)
         except Exception:
-            await self.session_service.create(self.session_id)
+            await self.session_service.create(session_id=self.session_id)
 
-    async def execute_prompt(self, user_prompt: str) -> AsyncGenerator[str, None]:
+    async def execute_prompt(self, user_prompt: str) -> AsyncGenerator[AdkEvent, None]:
         """
-        Executes a turn in the ADK agent, yielding reasoning and action steps as they occur.
+        Executes a turn in the ADK agent, yielding native Google ADK Event objects
+        containing structured actions, tool calls, and model outputs.
         """
         await self.init_session()
+        new_msg = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=user_prompt)],
+        )
         async for event in self.runner.run_async(
-            user_input=user_prompt,
+            user_id=self.user_id,
             session_id=self.session_id,
+            new_message=new_msg,
         ):
-            if hasattr(event, "content") and event.content:
-                yield str(event.content)
-            elif hasattr(event, "actions") and event.actions:
-                yield f"[ACTION] {event.actions}"
-            else:
-                yield f"[EVENT] {event}"
+            yield event
+
