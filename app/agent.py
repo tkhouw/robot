@@ -56,11 +56,10 @@ You operate in a smart home environment with known landmarks:
 def create_agent(model_name: Optional[str] = None) -> Agent:
     """Instantiates the Google ADK Agent backed by OpenRouter."""
     chosen_model = model_name or config.model_name
-    api_key = config.openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "dummy_key")
 
     client = openai.AsyncOpenAI(
         base_url=config.openrouter_base_url,
-        api_key=api_key,
+        api_key=config.openrouter_api_key,
     )
 
     llm = OpenAILlm(
