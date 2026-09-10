@@ -251,6 +251,27 @@ class WavegoSim(BaseRobot):
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
+    def get_camera_image(self, width: int = 320, height: int = 240) -> bytes:
+        """
+        Renders an RGB image from the front-facing eye-level camera
+        and returns PNG encoded bytes.
+        """
+        import io
+        from PIL import Image
+
+        if not hasattr(self, "_renderer") or self._renderer is None:
+            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
+        elif self._renderer.height != height or self._renderer.width != width:
+            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
+
+        self._renderer.update_scene(self.data, camera="front_camera")
+        rgb_array = self._renderer.render()
+
+        img = Image.fromarray(rgb_array)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
     def launch_viewer(self, target_fps: int = 30, key_callback=None):
         """
         Launches an interactive 3D visualizer window with decoupled physics

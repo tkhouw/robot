@@ -203,15 +203,22 @@ robot/
 ├── models/
 │   └── wavego/
 │       ├── assets/             # Official STL 3D mesh files from Waveshare CAD
-│       ├── wavego.xml          # 4-bar MJCF robot definition (joints, links, actuators)
+│       ├── wavego.xml          # 4-bar MJCF robot definition (joints, links, actuators, camera)
 │       └── scene.xml           # Simulation environment (ground plane, lighting, camera)
+│
+├── app/
+│   ├── __init__.py             # Application package marker
+│   ├── config.py               # Pydantic settings: OpenRouter API, model, landmarks, server port
+│   ├── tools.py                # Typed Google ADK tools (walk_forward, docking, vision, gestures)
+│   ├── agent.py                # Google ADK Cognitive Agent using OpenRouter DeepSeek vision
+│   ├── vision_sensor.py        # Passive low-cost frame-differencing motion detector
+│   └── gateway.py              # FastAPI REST & SSE Event Stream Server (Nest Doorbell, voice)
 │
 ├── wavego_protocol.py          # Official Waveshare JSON command constants & packet format
 ├── robot_interface.py          # Abstract BaseRobot interface & PhysicalRobotController (Serial)
 ├── wavego_kinematics.py        # Python port of the C++ closed-form IK and gait engine
-├── sim.py                      # MuJoCo simulation driver implementing BaseRobot
-├── agent.py                    # High-level cognitive agent with Sense-Think-Act loop
-├── main.py                     # Entry point demonstrating autonomous agent task execution
+├── sim.py                      # MuJoCo simulation driver implementing BaseRobot with camera rendering
+├── main.py                     # Entrypoint: Starts the robot, motion sensor, and event gateway
 ├── demo.py                     # Interactive 3D visualizer script for manual evaluation
 │
 ├── pyproject.toml              # Modern Python packaging and dependency config (managed by uv)
@@ -222,20 +229,16 @@ robot/
 
 ### How the Architecture Operates
 
-1. [`agent.py`](agent.py):
-   The **Cognitive Layer**. Implements a Sense-Think-Act loop with registered tool skills (`walk_distance`, `turn_degrees`, `crouch`, `stand`, `get_telemetry`, `handshake`). It plans and executes tasks by sending commands to any `BaseRobot` without knowing or caring whether it is driving a simulation or real hardware.
-2. [`main.py`](main.py):
-   The high-level autonomous agent demonstration script. Connects the agent to the robot and runs a multi-step task plan.
-3. [`robot_interface.py`](robot_interface.py):
-   The **Hardware Abstraction Layer (HAL)**. Defines `BaseRobot`, providing universal semantic methods (`stand()`, `walk()`, `crouch()`) that compile directly into official Waveshare JSON packets and route through `send_cmd()`. Also provides `PhysicalRobotController` for UART/WiFi serial execution.
-4. [`wavego_protocol.py`](wavego_protocol.py):
-   Defines the official protocol commands (`CMD_BASIC_MOVE = 111`, `CMD_STAND_UP = 110`, `CMD_BASIC_FUNC = 112`, etc.) matching the ESP32 firmware 1:1.
-5. [`sim.py`](sim.py):
-   The **Physics Digital Twin**. Implements `BaseRobot` for MuJoCo simulation. Interprets official JSON commands via `send_cmd()`, steps the kinematics and physics loops, and smooths servo rates.
-6. [`wavego_kinematics.py`](wavego_kinematics.py):
-   The **Kinematic Brain**. Computes closed-form Inverse Kinematics and gait trajectories, converting desired foot positions into 12 servo joint angles in radians (`rad=True`) or degrees (`rad=False`).
-7. [`demo.py`](demo.py):
-   An interactive 3D visualizer script for manual inspection and verification in MuJoCo.
+1. **Cognitive Agent & Tools ([`app/agent.py`](app/agent.py), [`app/tools.py`](app/tools.py))**:
+   Powered by Google ADK with OpenRouter (`deepseek/deepseek-v4-flash-vision-exp`). The agent has access to granular locomotion tools (`walk_forward`, `walk_backward`, `turn_left`, `turn_right`), home navigation (`navigate_to_landmark`, `return_to_charging_dock`), multimodal vision (`capture_camera_image`), greeting gestures (`perform_handshake`), and speech announcements (`announce_message`).
+2. **Event Ingestion Gateway ([`app/gateway.py`](app/gateway.py))**:
+   FastAPI web service that receives external webhooks (such as Google Home Nest doorbell rings with facial recognition metadata) and user voice/text commands, and broadcasts the agent's real-time reasoning and actions over Server-Sent Events (`/events/stream`).
+3. **Passive Vision Motion Sensor ([`app/vision_sensor.py`](app/vision_sensor.py))**:
+   Zero-cost local frame differencing running at 2 FPS on the robot's front eye-level camera. Detects scene motion without calling external LLM APIs, firing events only when movement occurs.
+4. **Hardware Abstraction Layer ([`robot_interface.py`](robot_interface.py), [`wavego_protocol.py`](wavego_protocol.py))**:
+   Universal `BaseRobot` interface compiling commands into official Waveshare JSON packets ($T=110, 111, 112, 113, 114$). Swappable between simulation (`WavegoSim`) and real hardware (`PhysicalRobotController`).
+5. **Physics Digital Twin & Kinematics ([`sim.py`](sim.py), [`wavego_kinematics.py`](wavego_kinematics.py))**:
+   MuJoCo 500 Hz simulation of the authentic 4-bar linkage mechanism with low-pass servo rate filtering and off-screen camera rendering.
 
 ---
 
@@ -249,40 +252,40 @@ This repository uses `uv` for fast, isolated Python environment management.
    uv sync
    ```
 
-2. Run the interactive simulation demo:
+2. Configure your OpenRouter API key in `.env`:
    ```bash
-   uv run python demo.py
+   echo "OPENROUTER_API_KEY=your_key_here" > .env
    ```
 
-### Interactive Viewer Controls
-- **Rotate Camera**: Left-click and drag.
-- **Pan Camera**: Right-click and drag.
-- **Zoom**: Scroll wheel.
-- **Pause / Unpause**: Spacebar.
-- **Slow Motion**: Press `S`.
-- **Exit**: Close the window or press `ESC`.
+### Running the Cognitive Agent & Event Gateway
+Start the robot driver, passive vision motion sensor, and FastAPI event gateway:
+```bash
+uv run python main.py
+```
 
-### Programmatic Control Example
-You can import `WavegoSim` and command the robot in your own scripts:
+#### Triggering External Events (e.g. Nest Doorbell):
+Send a simulated Google Nest doorbell event with facial recognition data:
+```bash
+curl -X POST http://127.0.0.1:8000/events/trigger \
+     -H "Content-Type: application/json" \
+     -d '{"source": "nest_doorbell", "event_type": "doorbell_press", "payload": {"person_name": "Alice"}}'
+```
+The robot will autonomously plan its route to the front door, inspect the scene, and announce a personalized greeting to Alice.
 
-```python
-from sim import WavegoSim
-import time
+#### Sending Phone Voice / Text Commands:
+```bash
+curl -X POST http://127.0.0.1:8000/events/command \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "Return to the charging dock and go to sleep."}'
+```
 
-# Initialize simulation and load model
-robot = WavegoSim()
+#### Listening to Live Agent Thoughts (SSE Feed):
+```bash
+curl -N http://127.0.0.1:8000/events/stream
+```
 
-# Stand up
-robot.stand()
-
-# Walk forward at 50% speed
-robot.walk(fb=50.0, lr=0.0)
-
-# Advance physics
-for _ in range(1000):
-    robot.step()
-    time.sleep(0.002)
-
-# Stop walking and return to stand
-robot.stop()
+### Interactive Manual Simulation Demo
+To test physical gaits, single-leg IK, and keyboard teleoperation directly in the MuJoCo viewer:
+```bash
+uv run python demo.py
 ```

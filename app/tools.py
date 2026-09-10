@@ -1,0 +1,256 @@
+"""
+ADK Tools for WAVEGO Pro Quadruped Robot.
+Wraps BaseRobot hardware and simulation calls into typed LLM-callable functions.
+"""
+
+import base64
+import math
+import time
+from typing import Any, Dict, Optional
+from robot_interface import BaseRobot
+from app.config import config
+
+# Global robot instance reference set during initialization
+_ROBOT_INSTANCE: Optional[BaseRobot] = None
+
+
+def set_robot_instance(robot: BaseRobot):
+    """Binds the active robot controller (Simulation or Physical) to the tools."""
+    global _ROBOT_INSTANCE
+    _ROBOT_INSTANCE = robot
+
+
+def get_robot() -> BaseRobot:
+    if _ROBOT_INSTANCE is None:
+        raise RuntimeError("Robot instance has not been bound to tools.")
+    return _ROBOT_INSTANCE
+
+
+# ---------------------------------------------------------------------------
+# Core Locomotion Helper
+# ---------------------------------------------------------------------------
+
+def walk_relative(distance_meters: float = 0.0, turn_degrees: float = 0.0) -> str:
+    """
+    Internal core controller for walking and turning with closed-loop telemetry.
+    Positive distance moves forward; negative distance moves backward.
+    Positive degrees turns right; negative degrees turns left.
+    """
+    robot = get_robot()
+    start_pos, _ = robot.get_pose()
+    start_rpy = robot.get_imu()
+    initial_yaw = start_rpy[2]
+
+    # Handle turning first
+    if abs(turn_degrees) > 1.0:
+        turn_dir = 35.0 if turn_degrees > 0 else -35.0
+        robot.walk(0.0, turn_dir)
+        target_yaw_diff = abs(turn_degrees)
+        yaw_accum = 0.0
+        prev_yaw = initial_yaw
+        t_start = time.time()
+
+        while yaw_accum < target_yaw_diff and (time.time() - t_start) < 15.0:
+            if hasattr(robot, "step"):
+                robot.step()
+            time.sleep(0.005)
+            curr_yaw = robot.get_imu()[2]
+            diff = abs(curr_yaw - prev_yaw)
+            if diff > 180.0:
+                diff = 360.0 - diff
+            yaw_accum += diff
+            prev_yaw = curr_yaw
+
+        robot.stand()
+        for _ in range(50):
+            if hasattr(robot, "step"):
+                robot.step()
+
+    # Handle translation next
+    if abs(distance_meters) > 0.01:
+        speed = 50.0 if distance_meters > 0 else -50.0
+        robot.walk(speed, 0.0)
+        target_dist = abs(distance_meters)
+        t_start = time.time()
+
+        while (time.time() - t_start) < 15.0:
+            if hasattr(robot, "step"):
+                robot.step()
+            time.sleep(0.005)
+            curr_pos, _ = robot.get_pose()
+            traveled = math.hypot(curr_pos[0] - start_pos[0], curr_pos[1] - start_pos[1])
+            if traveled >= target_dist:
+                break
+
+        robot.stand()
+        for _ in range(50):
+            if hasattr(robot, "step"):
+                robot.step()
+
+    curr_pos, _ = robot.get_pose()
+    curr_rpy = robot.get_imu()
+    return (
+        f"Motion completed. Current position: x={curr_pos[0]:.2f}m, y={curr_pos[1]:.2f}m, "
+        f"heading={curr_rpy[2]:.1f}°"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Individual Simple Locomotion Tools (Easily reasoned by LLMs)
+# ---------------------------------------------------------------------------
+
+def walk_forward(distance_meters: float = 0.2) -> str:
+    """
+    Walk forward by a specified distance in meters.
+    Use this to approach objects, advance along paths, or move toward a room.
+    """
+    return walk_relative(distance_meters=abs(distance_meters), turn_degrees=0.0)
+
+
+def walk_backward(distance_meters: float = 0.2) -> str:
+    """
+    Walk backward by a specified distance in meters.
+    Use this to back away from an obstacle or adjust positioning.
+    """
+    return walk_relative(distance_meters=-abs(distance_meters), turn_degrees=0.0)
+
+
+def turn_left(degrees: float = 30.0) -> str:
+    """
+    Rotate body counter-clockwise (to the left) by a given number of degrees.
+    """
+    return walk_relative(distance_meters=0.0, turn_degrees=-abs(degrees))
+
+
+def turn_right(degrees: float = 30.0) -> str:
+    """
+    Rotate body clockwise (to the right) by a given number of degrees.
+    """
+    return walk_relative(distance_meters=0.0, turn_degrees=abs(degrees))
+
+
+# ---------------------------------------------------------------------------
+# High-Level Navigation & Docking Tools
+# ---------------------------------------------------------------------------
+
+def navigate_to_landmark(landmark_name: str) -> str:
+    """
+    Navigate directly to a known domestic landmark.
+    Supported landmarks: 'front_door', 'charging_dock', 'living_room', 'kitchen'.
+    """
+    landmark_key = landmark_name.strip().lower().replace(" ", "_")
+    if landmark_key not in config.landmarks:
+        valid_keys = ", ".join(config.landmarks.keys())
+        return f"Unknown landmark '{landmark_name}'. Valid landmarks are: {valid_keys}"
+
+    target_x, target_y = config.landmarks[landmark_key]
+    robot = get_robot()
+    curr_pos, _ = robot.get_pose()
+    curr_rpy = robot.get_imu()
+
+    dx = target_x - curr_pos[0]
+    dy = target_y - curr_pos[1]
+    distance = math.hypot(dx, dy)
+
+    if distance < 0.05:
+        return f"Already at landmark '{landmark_name}'."
+
+    # Compute target heading in world frame
+    target_yaw = math.degrees(math.atan2(dy, dx))
+    curr_yaw = curr_rpy[2]
+    turn_angle = target_yaw - curr_yaw
+
+    # Normalize turn_angle to [-180, 180]
+    while turn_angle > 180.0:
+        turn_angle -= 360.0
+    while turn_angle < -180.0:
+        turn_angle += 360.0
+
+    # Turn to face target, then walk
+    walk_relative(distance_meters=0.0, turn_degrees=turn_angle)
+    walk_relative(distance_meters=distance, turn_degrees=0.0)
+
+    return f"Successfully navigated to landmark '{landmark_name}'."
+
+
+def return_to_charging_dock() -> str:
+    """
+    Navigates the robot back to the home charging dock, aligns on the metal contact plates,
+    and lowers body into a crouch pose to engage charging.
+    """
+    nav_result = navigate_to_landmark("charging_dock")
+    robot = get_robot()
+    robot.crouch()
+    for _ in range(60):
+        if hasattr(robot, "step"):
+            robot.step()
+    return f"{nav_result} Body is lowered onto charging plate contacts. Battery charging initiated."
+
+
+# ---------------------------------------------------------------------------
+# Multimodal Vision, Communication, & Posture Tools
+# ---------------------------------------------------------------------------
+
+def capture_camera_image() -> Dict[str, Any]:
+    """
+    Captures an RGB image from the robot's front eye-level camera.
+    Returns the visual frame for the agent to inspect its surroundings,
+    verify who is at the door, or confirm task completion.
+    """
+    robot = get_robot()
+    if hasattr(robot, "get_camera_image"):
+        png_bytes = robot.get_camera_image()
+        b64_str = base64.b64encode(png_bytes).decode("utf-8")
+        data_url = f"data:image/png;base64,{b64_str}"
+        return {
+            "status": "success",
+            "description": "Captured front camera frame.",
+            "image_data_url": data_url,
+        }
+    else:
+        return {
+            "status": "unavailable",
+            "description": "Camera capture is not supported on this robot hardware interface.",
+        }
+
+
+def perform_handshake() -> str:
+    """
+    Performs the official Waveshare paw wave / handshake gesture.
+    The robot sits back onto its rear legs, raises its right front paw,
+    and shakes it to greet someone.
+    """
+    robot = get_robot()
+    robot.handshake()
+    # Step through simulation playback if in simulation
+    if hasattr(robot, "motion_queue"):
+        while len(robot.motion_queue) > 0:
+            if hasattr(robot, "step"):
+                robot.step()
+            time.sleep(0.002)
+    return "Handshake paw gesture completed."
+
+
+def announce_message(message: str) -> str:
+    """
+    Announces a spoken message through the robot's speaker or notification system.
+    Use this to greet visitors, inform residents, or alert people in the house.
+    """
+    print(f"\n[ROBOT SPEAKER ANNOUNCEMENT]: \"{message}\"\n")
+    return f"Message announced: '{message}'"
+
+
+def read_telemetry() -> Dict[str, Any]:
+    """
+    Reads the robot's current sensory telemetry, including 3D world position (x, y, z),
+    Euler orientation (roll, pitch, yaw) in degrees, and movement status.
+    """
+    robot = get_robot()
+    pos, quat = robot.get_pose()
+    rpy = robot.get_imu()
+    return {
+        "position_xyz": [round(float(v), 3) for v in pos],
+        "orientation_rpy": [round(float(v), 1) for v in rpy],
+        "quaternion_wxyz": [round(float(v), 4) for v in quat],
+        "is_moving": getattr(robot, "is_moving", False),
+    }
