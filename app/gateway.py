@@ -52,13 +52,13 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press, nav_completed (High-priority action triggers)
+    1: doorbell_press, nav_completed, nav_stalled (High-priority action triggers & alerts)
     2: motion_detected (Passive camera alert)
     3: nav_feedback, generic sensor events
     """
     if event.event_type == "user_message":
         return 0
-    if event.event_type in ("doorbell_press", "nav_completed"):
+    if event.event_type in ("doorbell_press", "nav_completed", "nav_stalled"):
         return 1
     if event.event_type == "motion_detected":
         return 2
@@ -195,6 +195,16 @@ async def receive_event(event: RobotStimulusEvent):
         agent_prompt = (
             f"[SYSTEM EVENT: NAVIGATION COMPLETED] The robot has arrived at destination '{landmark}' "
             f"(position: {final_pos}). Proceed with your next task (e.g. greeting visitor or inspecting area)."
+        )
+
+    elif event.event_type == "nav_stalled":
+        landmark = event.payload.get("landmark", "destination")
+        dist = event.payload.get("distance_remaining_m", 0.0)
+        agent_prompt = (
+            f"[SYSTEM ALERT: NAVIGATION STALLED] Robot forward progress toward '{landmark}' has stalled "
+            f"({dist:.2f}m remaining). A physical obstacle or wall was encountered! "
+            f"Locomotion has been safely halted. Please call `capture_camera_image` to inspect the blockage, "
+            f"and use `walk_backward` or turning to navigate around it."
         )
 
     elif event.event_type == "nav_cancelled":

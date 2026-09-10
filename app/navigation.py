@@ -132,6 +132,12 @@ class NavigationManager:
         last_vel_time = time.time()
         measured_speed = 0.15  # Rolling average ground speed (m/s)
 
+        # Stall Detection: detect if robot is walking into a wall/obstacle
+        last_progress_time = time.time()
+        last_progress_dist = self.start_distance
+        stall_timeout = 3.5  # If robot fails to get 3cm closer in 3.5s, trigger stall
+        min_progress_delta = 0.03  # 3 cm threshold
+
         try:
             while not self._cancel_event.is_set():
                 curr_pos, _ = robot.get_pose()
@@ -143,6 +149,7 @@ class NavigationManager:
                 dy = target_y - curr_y
                 dist = math.hypot(dx, dy)
                 self.remaining_distance = dist
+                now = time.time()
 
                 # Check arrival condition (within 5 cm)
                 if dist <= 0.05:
@@ -160,6 +167,27 @@ class NavigationManager:
                         {
                             "landmark": landmark_name,
                             "final_pos": [round(curr_x, 3), round(curr_y, 3)],
+                        },
+                    )
+                    break
+
+                # Stall Check: Check if robot is making physical progress toward target
+                if dist < (last_progress_dist - min_progress_delta):
+                    last_progress_time = now
+                    last_progress_dist = dist
+                elif (now - last_progress_time) >= stall_timeout:
+                    # Stalled into a wall or obstacle! Stop motors and alert the agent
+                    print(f"\n[NAVIGATION STALL DETECTED] Robot stalled moving to '{landmark_name}'! Stopping motors...")
+                    robot.stop()
+                    robot.stand()
+                    self._is_navigating = False
+                    self._emit_gateway_event(
+                        "nav_stalled",
+                        {
+                            "landmark": landmark_name,
+                            "distance_remaining_m": round(dist, 2),
+                            "current_pos": [round(curr_x, 3), round(curr_y, 3)],
+                            "reason": "movement_deadlock_or_obstacle",
                         },
                     )
                     break
