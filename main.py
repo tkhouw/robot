@@ -22,7 +22,7 @@ def on_motion_detected(diff_score: float):
     print(f"\n[PASSIVE VISION DETECTOR] Motion detected (diff={diff_score:.1f})! Firing event...")
     try:
         requests.post(
-            f"http://127.0.0.1:{config.port}/events/trigger",
+            f"http://127.0.0.1:{config.port}/events",
             json={
                 "source": "motion_sensor",
                 "event_type": "motion_detected",
@@ -60,10 +60,12 @@ def main():
     # 4. Display service information and usage
     print(f"\nModel Backend: {config.model_name}")
     print(f"Event Gateway: http://{config.host}:{config.port}")
-    print("\nSupported External Event Endpoints:")
-    print(f" - POST http://127.0.0.1:{config.port}/events/trigger  (Nest Doorbell / Sensors)")
-    print(f" - POST http://127.0.0.1:{config.port}/events/command  (Phone Voice / Text Commands)")
-    print(f" - GET  http://127.0.0.1:{config.port}/events/stream   (Live SSE Thought & Action Stream)")
+    print("\nUnified Event Endpoint:")
+    print(f" - POST http://127.0.0.1:{config.port}/events")
+    print("     • user_message:   {\"source\": \"user_phone\", \"event_type\": \"user_message\", \"payload\": {\"message\": \"...\"}}")
+    print("     • doorbell_press: {\"source\": \"nest_doorbell\", \"event_type\": \"doorbell_press\", \"payload\": {\"person_name\": \"...\"}}")
+    print("     • motion_alert:   {\"source\": \"motion_sensor\", \"event_type\": \"motion_detected\", \"payload\": {...}}")
+    print(f" - GET  http://127.0.0.1:{config.port}/events/stream  (Live SSE Thought & Action Stream)")
     print("=" * 65)
 
     # 5. Serve the FastAPI Gateway

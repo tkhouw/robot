@@ -266,17 +266,17 @@ uv run python main.py
 #### Triggering External Events (e.g. Nest Doorbell):
 Send a simulated Google Nest doorbell event with facial recognition data:
 ```bash
-curl -X POST http://127.0.0.1:8000/events/trigger \
+curl -X POST http://127.0.0.1:8000/events \
      -H "Content-Type: application/json" \
      -d '{"source": "nest_doorbell", "event_type": "doorbell_press", "payload": {"person_name": "Alice"}}'
 ```
 The robot will autonomously plan its route to the front door, inspect the scene, and announce a personalized greeting to Alice.
 
-#### Sending Phone Voice / Text Commands:
+#### Sending User Messages / Queries from Phone or Laptop:
 ```bash
-curl -X POST http://127.0.0.1:8000/events/command \
+curl -X POST http://127.0.0.1:8000/events \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "Return to the charging dock and go to sleep."}'
+     -d '{"source": "user_phone", "event_type": "user_message", "payload": {"message": "Can you check if you have enough battery, and then return to the charging dock?"}}'
 ```
 
 #### Listening to Live Agent Thoughts (SSE Feed):

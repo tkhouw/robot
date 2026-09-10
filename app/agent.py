@@ -96,6 +96,7 @@ class QuadrupedCognitiveRuntime:
         self.agent = agent or create_agent()
         self.session_service = InMemorySessionService()
         self.runner = Runner(
+            app_name="wavego_quadruped_app",
             agent=self.agent,
             session_service=self.session_service,
         )

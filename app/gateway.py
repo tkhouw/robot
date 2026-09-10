@@ -32,15 +32,10 @@ event_queue: asyncio.Queue = asyncio.Queue()
 sse_subscribers: List[asyncio.Queue] = []
 
 
-class EventTriggerRequest(BaseModel):
-    source: str  # e.g. "nest_doorbell", "motion_sensor"
-    event_type: str  # e.g. "doorbell_press", "motion_detected"
+class Event(BaseModel):
+    source: str  # e.g. "user_phone", "nest_doorbell", "motion_sensor"
+    event_type: str  # e.g. "user_message", "doorbell_press", "motion_detected"
     payload: Dict[str, Any] = {}
-
-
-class CommandRequest(BaseModel):
-    source: str = "user_input"
-    prompt: str
 
 
 async def broadcast_sse(event_type: str, data: Any):
@@ -76,14 +71,20 @@ async def startup_event():
     asyncio.create_task(event_processor_loop())
 
 
-@app.post("/events/trigger")
-async def trigger_event(req: EventTriggerRequest):
+@app.post("/events")
+async def receive_event(event: Event):
     """
-    Ingests external webhook triggers (such as Nest Doorbell ring or motion detection).
-    Leverages Nest's onboard facial recognition metadata (person_name) when present.
+    Unified ingestion endpoint for all stimuli entering the robot:
+    - User conversations & instructions ("user_message")
+    - Smart home sensors (e.g. "nest_doorbell" with "doorbell_press")
+    - Local perception (e.g. "motion_sensor" with "motion_detected")
     """
-    if req.source == "nest_doorbell" and req.event_type == "doorbell_press":
-        person_name = req.payload.get("person_name")
+    if event.event_type == "user_message":
+        msg = event.payload.get("message") or event.payload.get("text") or ""
+        agent_prompt = f"[USER MESSAGE from {event.source}]: {msg}"
+
+    elif event.source == "nest_doorbell" and event.event_type == "doorbell_press":
+        person_name = event.payload.get("person_name")
         if person_name:
             agent_prompt = (
                 f"[SYSTEM EVENT: DOORBELL RING] The Google Home Nest doorbell has just rung! "
@@ -96,29 +97,23 @@ async def trigger_event(req: EventTriggerRequest):
                 "An unrecognized visitor is at the front door. "
                 "Please navigate to the front door and announce a polite greeting."
             )
-    elif req.source == "motion_sensor":
-        diff_val = req.payload.get("difference", 0.0)
+
+    elif event.source == "motion_sensor" and event.event_type == "motion_detected":
+        diff_val = event.payload.get("difference", 0.0)
         agent_prompt = (
             f"[SYSTEM EVENT: MOTION DETECTED] Camera detected physical movement "
             f"(intensity {diff_val:.1f}). Inspect the scene to verify status."
         )
+
     else:
-        agent_prompt = f"[SYSTEM EVENT from {req.source}]: {req.event_type} - {req.payload}"
+        agent_prompt = f"[SYSTEM EVENT: {event.event_type} from {event.source}]: {event.payload}"
 
     await event_queue.put(agent_prompt)
-    await broadcast_sse("event_received", {"source": req.source, "prompt": agent_prompt})
-    return {"status": "enqueued", "prompt": agent_prompt}
-
-
-@app.post("/events/command")
-async def receive_command(req: CommandRequest):
-    """
-    Ingests phone or laptop user commands (voice transcripts or text).
-    """
-    user_prompt = f"[USER COMMAND]: {req.prompt}"
-    await event_queue.put(user_prompt)
-    await broadcast_sse("command_received", {"prompt": req.prompt})
-    return {"status": "enqueued", "prompt": user_prompt}
+    await broadcast_sse(
+        "event_received",
+        {"source": event.source, "event_type": event.event_type, "prompt": agent_prompt},
+    )
+    return {"status": "enqueued", "event_type": event.event_type, "prompt": agent_prompt}
 
 
 @app.get("/events/stream")
@@ -143,3 +138,4 @@ async def event_stream(request: Request):
                 sse_subscribers.remove(queue)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
