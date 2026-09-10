@@ -52,13 +52,13 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press (Visitor at door)
+    1: doorbell_press, nav_completed (High-priority action triggers)
     2: motion_detected (Passive camera alert)
-    3: generic sensor events
+    3: nav_feedback, generic sensor events
     """
     if event.event_type == "user_message":
         return 0
-    if event.event_type == "doorbell_press":
+    if event.event_type in ("doorbell_press", "nav_completed"):
         return 1
     if event.event_type == "motion_detected":
         return 2
@@ -178,6 +178,28 @@ async def receive_event(event: RobotStimulusEvent):
     if event.event_type == "user_message":
         msg = event.payload.get("message") or event.payload.get("text") or ""
         agent_prompt = f"[USER MESSAGE from {event.source}]: {msg}"
+
+    elif event.event_type == "nav_feedback":
+        landmark = event.payload.get("landmark", "destination")
+        pct = event.payload.get("progress_pct", 0.0)
+        dist = event.payload.get("distance_remaining_m", 0.0)
+        eta = event.payload.get("eta_seconds", 0.0)
+        agent_prompt = (
+            f"[SYSTEM EVENT: NAVIGATION PROGRESS] En route to '{landmark}': "
+            f"{pct:.1f}% complete, {dist:.2f}m remaining, estimated ETA: {eta:.1f}s."
+        )
+
+    elif event.event_type == "nav_completed":
+        landmark = event.payload.get("landmark", "destination")
+        final_pos = event.payload.get("final_pos", [0, 0])
+        agent_prompt = (
+            f"[SYSTEM EVENT: NAVIGATION COMPLETED] The robot has arrived at destination '{landmark}' "
+            f"(position: {final_pos}). Proceed with your next task (e.g. greeting visitor or inspecting area)."
+        )
+
+    elif event.event_type == "nav_cancelled":
+        landmark = event.payload.get("landmark", "destination")
+        agent_prompt = f"[SYSTEM EVENT: NAVIGATION CANCELLED] Navigation to '{landmark}' was cancelled. Robot is safely standing."
 
     elif event.source == "nest_doorbell" and event.event_type == "doorbell_press":
         person_name = event.payload.get("person_name")

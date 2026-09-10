@@ -130,12 +130,25 @@ def turn_right(degrees: float = 30.0) -> str:
 
 
 # ---------------------------------------------------------------------------
-# High-Level Navigation & Docking Tools
+# High-Level Navigation & Docking Tools (Non-Blocking & Interruptible)
 # ---------------------------------------------------------------------------
+
+from app.navigation import NavigationManager
+
+_nav_manager: Optional[NavigationManager] = None
+
+
+def get_nav_manager() -> NavigationManager:
+    global _nav_manager
+    if _nav_manager is None:
+        _nav_manager = NavigationManager(get_robot)
+    return _nav_manager
+
 
 def navigate_to_landmark(landmark_name: str) -> str:
     """
-    Navigate directly to a known domestic landmark.
+    Begin non-blocking autonomous navigation to a domestic landmark.
+    The robot will navigate in the background while reporting progress updates.
     Supported landmarks: 'front_door', 'charging_dock', 'living_room', 'kitchen'.
     """
     landmark_key = landmark_name.strip().lower().replace(" ", "_")
@@ -144,47 +157,62 @@ def navigate_to_landmark(landmark_name: str) -> str:
         return f"Unknown landmark '{landmark_name}'. Valid landmarks are: {valid_keys}"
 
     target_x, target_y = config.landmarks[landmark_key]
-    robot = get_robot()
-    curr_pos, _ = robot.get_pose()
-    curr_rpy = robot.get_imu()
+    nav = get_nav_manager()
+    res = nav.start_navigation(landmark_name=landmark_key, target_x=target_x, target_y=target_y)
 
-    dx = target_x - curr_pos[0]
-    dy = target_y - curr_pos[1]
-    distance = math.hypot(dx, dy)
-
-    if distance < 0.05:
+    if res.get("status") == "already_at_destination":
         return f"Already at landmark '{landmark_name}'."
 
-    # Compute target heading in world frame
-    target_yaw = math.degrees(math.atan2(dy, dx))
-    curr_yaw = curr_rpy[2]
-    turn_angle = target_yaw - curr_yaw
+    return (
+        f"Navigation started towards '{landmark_name}' at ({target_x}, {target_y}). "
+        f"Distance: {res['initial_distance_m']}m. Estimated ETA: ~{res['estimated_eta_s']}s. "
+        f"You will receive live progress updates as the robot walks."
+    )
 
-    # Normalize turn_angle to [-180, 180]
-    while turn_angle > 180.0:
-        turn_angle -= 360.0
-    while turn_angle < -180.0:
-        turn_angle += 360.0
 
-    # Turn to face target, then walk
-    walk_relative(distance_meters=0.0, turn_degrees=turn_angle)
-    walk_relative(distance_meters=distance, turn_degrees=0.0)
-
-    return f"Successfully navigated to landmark '{landmark_name}'."
+def stop_navigation() -> str:
+    """
+    Immediately halt the robot and cancel any active navigation or walking movement.
+    Call this whenever the user says 'Stop!', 'Wait!', or gives an urgent command.
+    """
+    nav = get_nav_manager()
+    res = nav.cancel_navigation()
+    if res.get("status") == "idle":
+        robot = get_robot()
+        robot.stop()
+        robot.stand()
+        return "Robot is already stopped."
+    return f"Emergency stop executed: Navigation to '{res.get('landmark')}' cancelled. Robot brought to a safe stand."
 
 
 def return_to_charging_dock() -> str:
     """
-    Navigates the robot back to the home charging dock, aligns on the metal contact plates,
-    and lowers body into a crouch pose to engage charging.
+    Autonomously navigates to the home charging dock and lowers onto the
+    custom metal charging plates once arrived.
     """
-    nav_result = navigate_to_landmark("charging_dock")
     robot = get_robot()
-    robot.crouch()
-    for _ in range(60):
-        if hasattr(robot, "step"):
-            robot.step()
-    return f"{nav_result} Body is lowered onto charging plate contacts. Battery charging initiated."
+    nav = get_nav_manager()
+
+    def on_dock_reached():
+        print("[CHARGING DOCK] Arrived at dock! Crouching onto metal contact plate...")
+        robot.crouch()
+
+    res = nav.start_navigation(
+        landmark_name="charging_dock",
+        target_x=0.0,
+        target_y=0.0,
+        on_complete_callback=on_dock_reached,
+    )
+
+    if res.get("status") == "already_at_destination":
+        robot.crouch()
+        return "Already at charging dock. Crouched onto metal contact plates."
+
+    return (
+        f"Docking sequence initiated. Walking towards charging dock at (0.0, 0.0). "
+        f"Initial distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s. "
+        f"The robot will automatically crouch onto charging contacts upon arrival."
+    )
 
 
 # ---------------------------------------------------------------------------

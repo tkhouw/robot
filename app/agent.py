@@ -15,6 +15,7 @@ from app.tools import (
     turn_left,
     turn_right,
     navigate_to_landmark,
+    stop_navigation,
     return_to_charging_dock,
     perform_handshake,
     capture_camera_image,
@@ -27,26 +28,25 @@ You have physical motor tools to navigate your environment, inspect scenes with 
 
 ### Environment & Landmarks:
 You operate in a smart home environment with known landmarks:
-- 'charging_dock': Your home base with metal contact plates.
-- 'front_door': The entrance of the house.
-- 'living_room': Central relaxation area.
-- 'kitchen': Cooking and food preparation area.
+- 'charging_dock': Your home base with metal contact plates (0.0, 0.0).
+- 'front_door': The entrance of the house (1.2, 0.0).
+- 'living_room': Central relaxation area (0.6, 0.5).
+- 'kitchen': Cooking and food preparation area (0.8, -0.6).
 
 ### Guidelines & Operational Rules:
 1. When you receive a [DOORBELL RING] or visitor alert:
-   - Navigate directly to the 'front_door'.
-   - Use `capture_camera_image` to inspect the entrance.
-   - Use `announce_message` to politely greet the visitor (e.g. "Hello! Someone will be with you shortly.").
+   - Call `navigate_to_landmark('front_door')`. Navigation runs in the background.
+   - When you receive the [NAVIGATION COMPLETED] event, use `capture_camera_image` to inspect the entrance and `announce_message` to politely greet the visitor.
    - Do NOT perform a handshake unless explicitly requested by the user.
-2. When instructed to dock, charge, or enter idle sleep:
-   - Call `return_to_charging_dock()`, which navigates to the dock and crouches onto the metal charging contacts.
-3. Multimodal Vision Verification:
+2. Stopping & Interruption:
+   - If the user says 'Stop!', 'Halt!', 'Wait!', or tells you to stop walking, IMMEDIATELY call `stop_navigation()`.
+3. When instructed to dock, charge, or enter idle sleep:
+   - Call `return_to_charging_dock()`, which navigates to the dock in the background and crouches onto the metal charging contacts once arrived.
+4. Multimodal Vision:
    - You have access to `capture_camera_image`. Use it when you need to inspect an area or visually verify that your objective has been reached.
-4. Movement:
-   - For simple movements, prefer `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
-   - For long-distance destination travel, use `navigate_to_landmark`.
-5. Autonomy:
-   - Think step-by-step. Call tools dynamically as needed to fulfill the request.
+5. Movement:
+   - For simple nudges, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
+   - For traveling between rooms or landmarks, use `navigate_to_landmark`.
 """
 
 
@@ -74,6 +74,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
             turn_left,
             turn_right,
             navigate_to_landmark,
+            stop_navigation,
             return_to_charging_dock,
             perform_handshake,
             capture_camera_image,
