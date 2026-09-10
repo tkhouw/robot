@@ -53,9 +53,14 @@ def main():
     set_robot_instance(robot)
 
     # 3. Start passive vision motion detector
-    motion_sensor = PassiveMotionDetector(robot=robot, on_motion_callback=on_motion_detected)
+    motion_sensor = PassiveMotionDetector(
+        robot=robot,
+        on_motion_callback=on_motion_detected,
+        settling_delay=10.0,
+    )
     motion_sensor.start()
-    print("Passive Vision Motion Detector: ACTIVE (monitoring for frame changes)")
+    app.state.motion_sensor = motion_sensor
+    print("Passive Vision Motion Detector: ACTIVE (monitoring with 10s settling delay)")
 
     # 4. Display service information and usage
     print(f"\nModel Backend: {config.model_name}")

@@ -8,7 +8,7 @@ import asyncio
 import json
 import time
 from typing import Any, Dict, List
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -28,14 +28,58 @@ app.add_middleware(
 
 # Global Runtime & Event Queues
 runtime: QuadrupedCognitiveRuntime = None
-event_queue: asyncio.Queue = asyncio.Queue()
+# Bounded PriorityQueue (maxsize=5) storing tuples: (priority: int, counter: int, prompt_text: str)
+event_queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=5)
 sse_subscribers: List[asyncio.Queue] = []
+is_agent_busy: bool = False
+_queue_counter: int = 0  # Tie-breaker for PriorityQueue
+
+# Debounce tracking tables (event_key -> timestamp of last accepted event)
+_last_event_timestamps: Dict[str, float] = {}
+DEBOUNCE_WINDOWS = {
+    "doorbell_press": 60.0,   # 1 minute debounce
+    "motion_detected": 30.0,  # 30 seconds debounce
+}
 
 
 class RobotStimulusEvent(BaseModel):
     source: str  # e.g. "user_phone", "nest_doorbell", "motion_sensor"
     event_type: str  # e.g. "user_message", "doorbell_press", "motion_detected"
     payload: Dict[str, Any] = {}
+
+
+def get_event_priority(event: RobotStimulusEvent) -> int:
+    """
+    Returns numeric priority (lower value = higher priority).
+    0: user_message (Immediate human command/query)
+    1: doorbell_press (Visitor at door)
+    2: motion_detected (Passive camera alert)
+    3: generic sensor events
+    """
+    if event.event_type == "user_message":
+        return 0
+    if event.event_type == "doorbell_press":
+        return 1
+    if event.event_type == "motion_detected":
+        return 2
+    return 3
+
+
+def check_debounce(event: RobotStimulusEvent) -> bool:
+    """Returns True if the event should be processed, or False if debounced/dropped."""
+    debounce_duration = DEBOUNCE_WINDOWS.get(event.event_type)
+    if not debounce_duration:
+        return True
+
+    now = time.time()
+    key = f"{event.source}:{event.event_type}"
+    last_time = _last_event_timestamps.get(key, 0.0)
+
+    if (now - last_time) < debounce_duration:
+        return False
+
+    _last_event_timestamps[key] = now
+    return True
 
 
 async def broadcast_sse(event_type: str, data: Any):
@@ -49,10 +93,18 @@ async def broadcast_sse(event_type: str, data: Any):
 
 
 async def event_processor_loop():
-    """Background consumer worker processing incoming stimulus events sequentially."""
+    """Background consumer worker processing incoming stimulus events sequentially by priority."""
+    global is_agent_busy
     while True:
-        prompt_text = await event_queue.get()
-        await broadcast_sse("agent_turn_start", {"prompt": prompt_text})
+        priority, _, prompt_text = await event_queue.get()
+        is_agent_busy = True
+
+        # Toggle motion suppression on passive vision sensor while agent is reasoning/acting
+        motion_sensor = getattr(app.state, "motion_sensor", None)
+        if motion_sensor:
+            motion_sensor.suppress_motion_detection = True
+
+        await broadcast_sse("agent_turn_start", {"priority": priority, "prompt": prompt_text})
 
         try:
             async for adk_event in runtime.execute_prompt(prompt_text):
@@ -74,9 +126,12 @@ async def event_processor_loop():
         except Exception as e:
             print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})
-
-        await broadcast_sse("agent_turn_complete", {"status": "idle"})
-        event_queue.task_done()
+        finally:
+            is_agent_busy = False
+            if motion_sensor:
+                motion_sensor.suppress_motion_detection = False
+            await broadcast_sse("agent_turn_complete", {"status": "idle"})
+            event_queue.task_done()
 
 
 @app.on_event("startup")
@@ -89,11 +144,37 @@ async def startup_event():
 @app.post("/events")
 async def receive_event(event: RobotStimulusEvent):
     """
-    Unified ingestion endpoint for all stimuli entering the robot:
-    - User conversations & instructions ("user_message")
-    - Smart home sensors (e.g. "nest_doorbell" with "doorbell_press")
-    - Local perception (e.g. "motion_sensor" with "motion_detected")
+    Unified ingestion endpoint with Priority Queue, debouncing, and rate limiting.
     """
+    global _queue_counter
+    priority = get_event_priority(event)
+
+    # 1. Debounce check (e.g. 1-min for doorbell, 30s for motion)
+    if not check_debounce(event):
+        return {
+            "status": "dropped",
+            "reason": f"debounced (rate limited to once per {DEBOUNCE_WINDOWS.get(event.event_type)}s)",
+        }
+
+    # 2. Busy State Rate Limiting (reject low-priority events if agent is actively busy)
+    if is_agent_busy and priority >= 2:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Robot is currently busy executing an active task. Low-priority sensor alert dropped.",
+        )
+
+    # 3. Queue Full Check
+    if event_queue.full():
+        if priority > 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Robot event queue is full. Lower-priority event dropped.",
+            )
+        else:
+            # For highest-priority user_message, discard lowest priority item from queue if possible
+            pass
+
+    # 4. Format prompt
     if event.event_type == "user_message":
         msg = event.payload.get("message") or event.payload.get("text") or ""
         agent_prompt = f"[USER MESSAGE from {event.source}]: {msg}"
@@ -123,12 +204,13 @@ async def receive_event(event: RobotStimulusEvent):
     else:
         agent_prompt = f"[SYSTEM EVENT: {event.event_type} from {event.source}]: {event.payload}"
 
-    await event_queue.put(agent_prompt)
+    _queue_counter += 1
+    await event_queue.put((priority, _queue_counter, agent_prompt))
     await broadcast_sse(
         "event_received",
-        {"source": event.source, "event_type": event.event_type, "prompt": agent_prompt},
+        {"source": event.source, "event_type": event.event_type, "priority": priority, "prompt": agent_prompt},
     )
-    return {"status": "enqueued", "event_type": event.event_type, "prompt": agent_prompt}
+    return {"status": "enqueued", "priority": priority, "event_type": event.event_type, "prompt": agent_prompt}
 
 
 @app.get("/events/stream")

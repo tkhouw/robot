@@ -28,16 +28,22 @@ class PassiveMotionDetector:
         on_motion_callback: Optional[Callable[[float], None]] = None,
         diff_threshold: float = None,
         fps: float = None,
+        settling_delay: float = 10.0,
     ):
         self.robot = robot
         self.on_motion_callback = on_motion_callback
         self.diff_threshold = diff_threshold or config.motion_diff_threshold
         self.fps = fps or config.motion_detection_fps
+        self.settling_delay = settling_delay
+
+        # External suppression flag (e.g. while agent is reasoning/acting)
+        self.suppress_motion_detection: bool = False
 
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._prev_frame: Optional[np.ndarray] = None
         self._last_alert_time: float = 0.0
+        self._last_moving_time: float = 0.0
         self._cooldown_seconds: float = 5.0  # Prevent flooding events
 
     def start(self):
@@ -59,9 +65,23 @@ class PassiveMotionDetector:
 
         while self._running:
             start_t = time.time()
+            now = start_t
 
-            # Skip checking if the robot is currently walking/turning to prevent self-motion false positives
+            # 1. Suppressed externally during agent turn execution
+            if self.suppress_motion_detection:
+                self._prev_frame = None
+                time.sleep(sample_interval)
+                continue
+
+            # 2. Check if robot is actively moving
             if getattr(self.robot, "is_moving", False):
+                self._last_moving_time = now
+                self._prev_frame = None
+                time.sleep(sample_interval)
+                continue
+
+            # 3. Check settling delay after motion stops (10 seconds)
+            if (now - self._last_moving_time) < self.settling_delay:
                 self._prev_frame = None
                 time.sleep(sample_interval)
                 continue
