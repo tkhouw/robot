@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 mujoco_menagerie/
 wavego_upstream/
+.env
