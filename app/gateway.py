@@ -195,15 +195,6 @@ async def event_processor_loop():
 
                     await broadcast_sse("agent_adk_event", event_dict)
 
-                    # Break if the agent emitted its final terminal response
-                    if hasattr(adk_event, "is_final_response") and adk_event.is_final_response():
-                        break
-
-                    # If the agent executed a tool and provided its thought, or reached safety step cap
-                    if step_count >= MAX_STEPS_PER_TURN:
-                        print(f"[AGENT TURN GUARD] Concluded turn after {step_count} steps to allow next queued event to process.")
-                        break
-
         except TimeoutError:
             print(f"[AGENT TIMEOUT] Turn exceeded 15s timeout limit; concluding turn and releasing queue.")
             await broadcast_sse("agent_error", {"error": "Turn timed out after 15s; proceeding to next event."})
