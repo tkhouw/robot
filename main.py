@@ -60,17 +60,11 @@ def main():
     )
     motion_sensor.start()
     app.state.motion_sensor = motion_sensor
-    # 4. Optional Native MuJoCo 3D Window (Option C)
+    # 4. Optional Native MuJoCo 3D Window
     import argparse
     parser = argparse.ArgumentParser(description="WAVEGO Pro Cognitive Agent Gateway")
     parser.add_argument("--gui", action="store_true", help="Launch native interactive MuJoCo 3D window alongside Web UI")
     args, _ = parser.parse_known_args()
-
-    if args.gui and hasattr(robot, "launch_viewer"):
-        import threading
-        print("Launching native MuJoCo 3D Interactive Window...")
-        gui_thread = threading.Thread(target=robot.launch_viewer, daemon=True, name="MuJoCoViewerThread")
-        gui_thread.start()
 
     # 5. Display service information and usage
     print(f"\nModel Backend: {config.model_name}")
@@ -80,13 +74,36 @@ def main():
     print(f"Live SSE Stream:   http://{config.host}:{config.port}/events/stream")
     print("=" * 65)
 
-    # 6. Serve the FastAPI Gateway (with fast 1s graceful shutdown timeout on Ctrl+C)
+    # 6. Serve the FastAPI Gateway & Optional Native 3D Viewer
+    # Note: On Linux/X11/Wayland, GLFW requires window creation to occur on the MAIN thread.
     try:
-        uvicorn.run(app, host=config.host, port=config.port, timeout_graceful_shutdown=1)
+        if args.gui and hasattr(robot, "launch_viewer"):
+            import threading
+            print("Launching native MuJoCo 3D Interactive Window on main thread...")
+            server_config = uvicorn.Config(
+                app,
+                host=config.host,
+                port=config.port,
+                log_level="info",
+                timeout_graceful_shutdown=1,
+            )
+            server = uvicorn.Server(server_config)
+            server_thread = threading.Thread(target=server.run, daemon=True, name="UvicornServerThread")
+            server_thread.start()
+
+            # Run interactive viewer on the main thread
+            try:
+                robot.launch_viewer()
+            finally:
+                server.should_exit = True
+                server_thread.join(timeout=1.5)
+        else:
+            uvicorn.run(app, host=config.host, port=config.port, timeout_graceful_shutdown=1)
     finally:
         motion_sensor.stop()
 
 
 if __name__ == "__main__":
     main()
+
 

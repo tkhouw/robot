@@ -238,8 +238,9 @@ class WavegoSim(BaseRobot):
 
     def get_pose(self) -> Tuple[np.ndarray, np.ndarray]:
         """Returns (x, y, z) position and orientation quaternion [w, x, y, z]."""
-        pos = self.data.qpos[0:3].copy()
-        quat = self.data.qpos[3:7].copy()
+        with self._lock:
+            pos = self.data.qpos[0:3].copy()
+            quat = self.data.qpos[3:7].copy()
         return pos, quat
 
     def get_imu(self) -> Tuple[float, float, float]:
@@ -247,7 +248,8 @@ class WavegoSim(BaseRobot):
         Returns estimated Euler angles (roll, pitch, yaw) in degrees from quaternion.
         Matches onboard physical MPU6050 output.
         """
-        w, x, y, z = self.data.qpos[3:7]
+        with self._lock:
+            w, x, y, z = self.data.qpos[3:7]
         # Roll (x-axis rotation)
         sinr_cosp = 2 * (w * x + y * z)
         cosr_cosp = 1 - 2 * (x * x + y * y)
@@ -312,19 +314,27 @@ class WavegoSim(BaseRobot):
         render_interval = 1.0 / target_fps
         sim_dt = self.model.opt.timestep
         last_render_time = time.time()
+        self.has_active_viewer = True
 
-        with mujoco.viewer.launch_passive(self.model, self.data, key_callback=key_callback) as viewer:
-            viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+        try:
+            with self._lock:
+                viewer_cm = mujoco.viewer.launch_passive(self.model, self.data, key_callback=key_callback)
 
-            while viewer.is_running():
-                now = time.time()
-                self.step()
+            with viewer_cm as viewer:
+                viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
 
-                if now - last_render_time >= render_interval:
-                    viewer.sync()
-                    last_render_time = now
+                while viewer.is_running():
+                    now = time.time()
+                    self.step()
 
-                elapsed = time.time() - now
-                sleep_time = sim_dt - elapsed
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                    if now - last_render_time >= render_interval:
+                        with self._lock:
+                            viewer.sync()
+                        last_render_time = now
+
+                    elapsed = time.time() - now
+                    sleep_time = sim_dt - elapsed
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+        finally:
+            self.has_active_viewer = False

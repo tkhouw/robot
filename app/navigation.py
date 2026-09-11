@@ -209,8 +209,8 @@ class NavigationManager:
                     lr_correction = max(-25.0, min(25.0, heading_err * 1.5))
                     robot.walk(fb=50.0, lr=lr_correction)
 
-                # Advance physics in simulation if available
-                if hasattr(robot, "step"):
+                # Advance physics in simulation if available (and if not driven by active 3D viewer)
+                if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
                     robot.step()
 
                 # Calculate true rolling speed and ETA
