@@ -96,10 +96,11 @@ class QuadrupedCognitiveRuntime:
     """
 
     def __init__(self, agent: Optional[Agent] = None):
+        self.app_name = "wavego_quadruped_app"
         self.agent = agent or create_agent()
         self.session_service = InMemorySessionService()
         self.runner = Runner(
-            app_name="wavego_quadruped_app",
+            app_name=self.app_name,
             agent=self.agent,
             session_service=self.session_service,
         )
@@ -107,11 +108,18 @@ class QuadrupedCognitiveRuntime:
         self.session_id = "default_wavego_session"
 
     async def init_session(self):
-        """Initializes the session in the session service."""
-        try:
-            await self.session_service.get(session_id=self.session_id)
-        except Exception:
-            await self.session_service.create(session_id=self.session_id)
+        """Initializes the session in the session service if it does not exist."""
+        sess = await self.session_service.get_session(
+            app_name=self.app_name,
+            user_id=self.user_id,
+            session_id=self.session_id,
+        )
+        if not sess:
+            await self.session_service.create_session(
+                app_name=self.app_name,
+                user_id=self.user_id,
+                session_id=self.session_id,
+            )
 
     async def execute_prompt(self, user_prompt: str) -> AsyncGenerator[AdkEvent, None]:
         """
