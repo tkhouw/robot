@@ -130,12 +130,12 @@ class NavigationManager:
         feedback_interval = 20.0  # Send feedback event every 2 seconds
         last_pos_for_vel, _ = robot.get_pose()
         last_vel_time = time.time()
-        measured_speed = 0.15  # Rolling average ground speed (m/s)
+        measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to WAVEGO trot
 
         # Stall Detection: detect if robot is walking into a wall/obstacle
         last_progress_time = time.time()
         last_progress_dist = self.start_distance
-        stall_timeout = 3.5  # If robot fails to get 3cm closer in 3.5s, trigger stall
+        stall_timeout = 6.0  # 6.0s window allows robot to execute in-place turns without false stall
         min_progress_delta = 0.03  # 3 cm threshold
 
         try:
@@ -151,8 +151,8 @@ class NavigationManager:
                 self.remaining_distance = dist
                 now = time.time()
 
-                # Check arrival condition (within 5 cm)
-                if dist <= 0.05:
+                # Check arrival condition (within 8 cm of target landmark)
+                if dist <= 0.08:
                     robot.stop()
                     robot.stand()
                     self._is_navigating = False
@@ -201,12 +201,15 @@ class NavigationManager:
                     heading_err += 360.0
 
                 # Steering vs Straight Walking logic
-                if abs(heading_err) > 15.0:
-                    turn_cmd = 35.0 if heading_err > 0 else -35.0
+                # Note: In Waveshare kinematics, move_lr < 0 turns Left (yaw increases)
+                # and move_lr > 0 turns Right (yaw decreases).
+                if abs(heading_err) > 30.0 and dist > 0.20:
+                    # Large heading error: turn in place first
+                    turn_cmd = -35.0 if heading_err > 0 else 35.0
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
-                    # Forward with gentle proportional heading correction
-                    lr_correction = max(-25.0, min(25.0, heading_err * 1.5))
+                    # Forward with smooth proportional heading correction
+                    lr_correction = max(-25.0, min(25.0, -heading_err * 1.5))
                     robot.walk(fb=50.0, lr=lr_correction)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
