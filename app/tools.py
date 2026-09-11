@@ -46,25 +46,28 @@ def walk_relative(distance_meters: float = 0.0, turn_degrees: float = 0.0) -> st
         turn_dir = 35.0 if turn_degrees > 0 else -35.0
         robot.walk(0.0, turn_dir)
         target_yaw_diff = abs(turn_degrees)
-        yaw_accum = 0.0
-        prev_yaw = initial_yaw
         t_start = time.time()
 
-        while yaw_accum < target_yaw_diff and (time.time() - t_start) < 15.0:
-            if hasattr(robot, "step"):
+        while (time.time() - t_start) < 25.0:
+            if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
                 robot.step()
-            time.sleep(0.005)
+            time.sleep(0.002)
+
             curr_yaw = robot.get_imu()[2]
-            diff = abs(curr_yaw - prev_yaw)
-            if diff > 180.0:
-                diff = 360.0 - diff
-            yaw_accum += diff
-            prev_yaw = curr_yaw
+            net_diff = curr_yaw - initial_yaw
+            while net_diff > 180.0:
+                net_diff -= 360.0
+            while net_diff < -180.0:
+                net_diff += 360.0
+
+            if abs(net_diff) >= target_yaw_diff:
+                break
 
         robot.stand()
-        for _ in range(50):
-            if hasattr(robot, "step"):
-                robot.step()
+        if not getattr(robot, "has_active_viewer", False):
+            for _ in range(50):
+                if hasattr(robot, "step"):
+                    robot.step()
 
     # Handle translation next
     if abs(distance_meters) > 0.01:
@@ -73,19 +76,20 @@ def walk_relative(distance_meters: float = 0.0, turn_degrees: float = 0.0) -> st
         target_dist = abs(distance_meters)
         t_start = time.time()
 
-        while (time.time() - t_start) < 15.0:
-            if hasattr(robot, "step"):
+        while (time.time() - t_start) < 25.0:
+            if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
                 robot.step()
-            time.sleep(0.005)
+            time.sleep(0.002)
             curr_pos, _ = robot.get_pose()
             traveled = math.hypot(curr_pos[0] - start_pos[0], curr_pos[1] - start_pos[1])
             if traveled >= target_dist:
                 break
 
         robot.stand()
-        for _ in range(50):
-            if hasattr(robot, "step"):
-                robot.step()
+        if not getattr(robot, "has_active_viewer", False):
+            for _ in range(50):
+                if hasattr(robot, "step"):
+                    robot.step()
 
     curr_pos, _ = robot.get_pose()
     curr_rpy = robot.get_imu()
@@ -115,16 +119,16 @@ def walk_backward(distance_meters: float = 0.2) -> str:
     return walk_relative(distance_meters=-abs(distance_meters), turn_degrees=0.0)
 
 
-def turn_left(degrees: float = 30.0) -> str:
+def turn_left(degrees: float = 90.0) -> str:
     """
-    Rotate body counter-clockwise (to the left) by a given number of degrees.
+    Rotate body counter-clockwise (to the left) by a given number of degrees (default: 90° quarter turn).
     """
     return walk_relative(distance_meters=0.0, turn_degrees=-abs(degrees))
 
 
-def turn_right(degrees: float = 30.0) -> str:
+def turn_right(degrees: float = 90.0) -> str:
     """
-    Rotate body clockwise (to the right) by a given number of degrees.
+    Rotate body clockwise (to the right) by a given number of degrees (default: 90° quarter turn).
     """
     return walk_relative(distance_meters=0.0, turn_degrees=abs(degrees))
 
