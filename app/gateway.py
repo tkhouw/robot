@@ -9,7 +9,7 @@ import functools
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -35,10 +35,12 @@ app.add_middleware(
 
 # Global Runtime & Event Queues
 runtime: QuadrupedCognitiveRuntime = None
-# Bounded PriorityQueue (maxsize=5) storing tuples: (priority: int, counter: int, prompt_text: str)
-event_queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=5)
+# Bounded PriorityQueue (maxsize=15) storing tuples: (priority: int, counter: int, prompt_text: str, event_meta: dict)
+event_queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=15)
 sse_subscribers: List[asyncio.Queue] = []
 is_agent_busy: bool = False
+active_task: Optional[Dict[str, Any]] = None
+recent_event_audit: List[Dict[str, Any]] = []  # Ring buffer of recent ingested/dropped events
 _queue_counter: int = 0  # Tie-breaker for PriorityQueue
 
 # Debounce tracking tables (event_key -> timestamp of last accepted event)
@@ -47,6 +49,50 @@ DEBOUNCE_WINDOWS = {
     "doorbell_press": 60.0,   # 1 minute debounce
     "motion_detected": 30.0,  # 30 seconds debounce
 }
+
+
+def log_event_audit(event_type: str, source: str, priority: int, status: str, detail: str = ""):
+    """Logs recent event activity to the audit ring buffer (max 15 items)."""
+    global recent_event_audit
+    audit_entry = {
+        "timestamp": time.time(),
+        "event_type": event_type,
+        "source": source,
+        "priority": priority,
+        "status": status,  # "enqueued", "completed", "dropped"
+        "detail": detail,
+    }
+    recent_event_audit.insert(0, audit_entry)
+    recent_event_audit = recent_event_audit[:15]
+
+
+async def broadcast_queue_state():
+    """Broadcasts current snapshot of active task, queued events, and recent audit log."""
+    items = []
+    # Peek into PriorityQueue internal heap without removing items
+    try:
+        raw_items = list(event_queue._queue)
+        for item in sorted(raw_items, key=lambda x: (x[0], x[1])):
+            priority, counter, prompt, meta = item
+            items.append({
+                "priority": priority,
+                "counter": counter,
+                "prompt": prompt,
+                "source": meta.get("source", "unknown"),
+                "event_type": meta.get("event_type", "unknown"),
+                "timestamp": meta.get("timestamp", time.time()),
+            })
+    except Exception:
+        pass
+
+    state_payload = {
+        "is_busy": is_agent_busy,
+        "queue_size": event_queue.qsize(),
+        "active_task": active_task,
+        "queued_events": items,
+        "recent_audit": recent_event_audit,
+    }
+    await broadcast_sse("queue_state", state_payload)
 
 
 class RobotStimulusEvent(BaseModel):
@@ -59,16 +105,18 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press, nav_completed, nav_stalled (High-priority action triggers & alerts)
-    2: motion_detected (Passive camera alert)
-    3: nav_feedback, generic sensor events
+    1: doorbell_press, nav_completed, nav_stalled (High-priority action triggers & arrival alerts)
+    2: nav_feedback (Normal navigation progress feedback)
+    3: motion_detected, passive camera alert, generic sensor events
     """
     if event.event_type == "user_message":
         return 0
     if event.event_type in ("doorbell_press", "nav_completed", "nav_stalled"):
         return 1
-    if event.event_type == "motion_detected":
+    if event.event_type == "nav_feedback":
         return 2
+    if event.event_type == "motion_detected":
+        return 3
     return 3
 
 
@@ -101,10 +149,18 @@ async def broadcast_sse(event_type: str, data: Any):
 
 async def event_processor_loop():
     """Background consumer worker processing incoming stimulus events sequentially by priority."""
-    global is_agent_busy
+    global is_agent_busy, active_task
     while True:
-        priority, _, prompt_text = await event_queue.get()
+        priority, counter, prompt_text, meta = await event_queue.get()
         is_agent_busy = True
+        active_task = {
+            "priority": priority,
+            "counter": counter,
+            "prompt": prompt_text,
+            "source": meta.get("source", "unknown"),
+            "event_type": meta.get("event_type", "unknown"),
+            "start_time": time.time(),
+        }
 
         # Toggle motion suppression on passive vision sensor while agent is reasoning/acting
         motion_sensor = getattr(app.state, "motion_sensor", None)
@@ -112,6 +168,7 @@ async def event_processor_loop():
             motion_sensor.suppress_motion_detection = True
 
         await broadcast_sse("agent_turn_start", {"priority": priority, "prompt": prompt_text})
+        await broadcast_queue_state()
 
         try:
             async for adk_event in runtime.execute_prompt(prompt_text):
@@ -134,11 +191,20 @@ async def event_processor_loop():
             print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})
         finally:
+            log_event_audit(
+                meta.get("event_type", "task"),
+                meta.get("source", "system"),
+                priority,
+                "completed",
+                detail=f"Duration: {round(time.time() - active_task['start_time'], 1)}s" if active_task else "",
+            )
             is_agent_busy = False
+            active_task = None
             if motion_sensor:
                 motion_sensor.suppress_motion_detection = False
             await broadcast_sse("agent_turn_complete", {"status": "idle"})
             event_queue.task_done()
+            await broadcast_queue_state()
 
 
 is_shutting_down: bool = False
@@ -202,28 +268,32 @@ async def receive_event(event: RobotStimulusEvent):
 
     # 1. Debounce check (e.g. 1-min for doorbell, 30s for motion)
     if not check_debounce(event):
+        log_event_audit(event.event_type, event.source, priority, "dropped", detail="Debounced (rate limit window active)")
+        await broadcast_queue_state()
         return {
             "status": "dropped",
             "reason": f"debounced (rate limited to once per {DEBOUNCE_WINDOWS.get(event.event_type)}s)",
         }
 
-    # 2. Busy State Rate Limiting (reject low-priority events if agent is actively busy)
-    if is_agent_busy and priority >= 2:
+    # 2. Busy State Rate Limiting
+    # Protect priority 0 (user) and priority 1 (doorbell, nav_completed, nav_stalled) from being dropped!
+    if is_agent_busy and priority >= 3:
+        log_event_audit(event.event_type, event.source, priority, "dropped", detail="Robot actively busy with higher priority task")
+        await broadcast_queue_state()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Robot is currently busy executing an active task. Low-priority sensor alert dropped.",
         )
 
-    # 3. Queue Full Check
+    # 3. Queue Full Check: Never reject priority 0 or priority 1
     if event_queue.full():
-        if priority > 0:
+        if priority > 1:
+            log_event_audit(event.event_type, event.source, priority, "dropped", detail="Event queue full (capacity 15)")
+            await broadcast_queue_state()
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Robot event queue is full. Lower-priority event dropped.",
             )
-        else:
-            # For highest-priority user_message, discard lowest priority item from queue if possible
-            pass
 
     # 4. Format prompt
     if event.event_type == "user_message":
@@ -239,6 +309,8 @@ async def receive_event(event: RobotStimulusEvent):
             f"[SYSTEM EVENT: NAVIGATION PROGRESS] En route to '{landmark}': "
             f"{pct:.1f}% complete, {dist:.2f}m remaining, estimated ETA: {eta:.1f}s."
         )
+        # Also broadcast progress directly to dashboard UI widget
+        await broadcast_sse("nav_progress", event.payload)
 
     elif event.event_type == "nav_completed":
         landmark = event.payload.get("landmark", "destination")
@@ -288,11 +360,18 @@ async def receive_event(event: RobotStimulusEvent):
         agent_prompt = f"[SYSTEM EVENT: {event.event_type} from {event.source}]: {event.payload}"
 
     _queue_counter += 1
-    await event_queue.put((priority, _queue_counter, agent_prompt))
+    meta = {
+        "source": event.source,
+        "event_type": event.event_type,
+        "timestamp": time.time(),
+    }
+    await event_queue.put((priority, _queue_counter, agent_prompt, meta))
+    log_event_audit(event.event_type, event.source, priority, "enqueued", detail="Added to priority queue")
     await broadcast_sse(
         "event_received",
         {"source": event.source, "event_type": event.event_type, "priority": priority, "prompt": agent_prompt},
     )
+    await broadcast_queue_state()
     return {"status": "enqueued", "priority": priority, "event_type": event.event_type, "prompt": agent_prompt}
 
 

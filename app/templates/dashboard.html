@@ -260,6 +260,105 @@
     .card-alert { border-left: 3px solid var(--accent-red); background: #2b1111; color: #ff7b72; font-weight: 600; }
     .card-completed { border-left: 3px solid var(--accent-yellow); background: #1f1b0d; }
 
+    /* Event Queue Monitor Widget */
+    .queue-section {
+      background: #161b22;
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 12px;
+      font-size: 0.82rem;
+    }
+    .queue-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .queue-badge-count {
+      background: var(--accent-blue);
+      color: #fff;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .active-task-box {
+      background: #0f1e2e;
+      border: 1px solid #1f6feb;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .active-task-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #79c0ff;
+      font-weight: 600;
+    }
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 110px;
+      overflow-y: auto;
+    }
+    .queue-item {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      padding: 4px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+    }
+    .p-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .p0 { background: #f85149; color: #fff; }
+    .p1 { background: #d29922; color: #000; }
+    .p2 { background: #1f6feb; color: #fff; }
+    .p3 { background: #484f58; color: #c9d1d9; }
+
+    .audit-drawer-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.72rem;
+      padding: 2px 4px;
+      text-decoration: underline;
+    }
+    .audit-drawer-btn:hover { color: #fff; }
+    .audit-container {
+      margin-top: 6px;
+      max-height: 100px;
+      overflow-y: auto;
+      background: #090d12;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-family: monospace;
+      font-size: 0.72rem;
+    }
+    .audit-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+      border-bottom: 1px solid #1e242c;
+    }
+    .audit-status-dropped { color: #ff7b72; font-weight: 600; }
+    .audit-status-enqueued { color: #7ee787; }
+    .audit-status-completed { color: #a5d6ff; }
+
     /* Chat Bar */
     .chat-section {
       padding: 10px 12px;
@@ -396,6 +495,36 @@
         </div>
       </div>
 
+      <!-- Priority Event Queue Monitor & Inspector -->
+      <div class="queue-section" id="queueSection">
+        <div class="queue-title-row">
+          <strong>⚡ RobotStimulusEvent Priority Queue</strong>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="queue-badge-count" id="queueCountBadge">0 Queued</span>
+            <button class="audit-drawer-btn" onclick="toggleAuditDrawer()">Audit Log ▾</button>
+          </div>
+        </div>
+
+        <!-- Active Task Banner -->
+        <div class="active-task-box" id="activeTaskBox" style="display:none;">
+          <div class="active-task-header">
+            <span>⚙️ ACTIVE PROCESSING (<span id="activeSource"></span>)</span>
+            <span class="p-badge" id="activePBadge">P1</span>
+          </div>
+          <div id="activePrompt" style="font-size:0.77rem; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+        </div>
+
+        <!-- Waiting Queue Items -->
+        <div class="queue-list" id="queueList">
+          <div style="color:var(--text-dim); font-size:0.75rem; text-align:center; padding:4px;">(Queue is empty — Robot idle)</div>
+        </div>
+
+        <!-- Audit Drawer (Hidden by default) -->
+        <div class="audit-container" id="auditContainer" style="display:none;">
+          <div id="auditRows"></div>
+        </div>
+      </div>
+
       <!-- Navigation Live Progress Widget -->
       <div class="nav-progress-card" id="navProgressCard">
         <div style="display: flex; justify-content: space-between;">
@@ -523,8 +652,77 @@
         updateNavProgress(event.data);
       } else if (event.type === 'telemetry') {
         updateTelemetry(event.data);
+      } else if (event.type === 'queue_state') {
+        updateQueueDisplay(event.data);
       } else if (event.type === 'server_shutdown') {
         setServerOffline("The backend was stopped by user (Ctrl+C).");
+      }
+    }
+
+    function toggleAuditDrawer() {
+      const el = document.getElementById('auditContainer');
+      el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+    }
+
+    function updateQueueDisplay(q) {
+      if (!q) return;
+
+      // Update badge count
+      const countBadge = document.getElementById('queueCountBadge');
+      const count = (q.queued_events || []).length;
+      countBadge.textContent = `${count} Queued`;
+      countBadge.style.backgroundColor = count > 0 ? '#1f6feb' : '#30363d';
+
+      // Update active task banner
+      const activeBox = document.getElementById('activeTaskBox');
+      const activePBadge = document.getElementById('activePBadge');
+      const activeSource = document.getElementById('activeSource');
+      const activePrompt = document.getElementById('activePrompt');
+
+      if (q.active_task) {
+        activeBox.style.display = 'flex';
+        const p = q.active_task.priority;
+        activePBadge.className = `p-badge p${p}`;
+        activePBadge.textContent = `P${p}`;
+        activeSource.textContent = `${q.active_task.source} • ${q.active_task.event_type}`;
+        activePrompt.textContent = q.active_task.prompt;
+      } else {
+        activeBox.style.display = 'none';
+      }
+
+      // Update queued items list
+      const listEl = document.getElementById('queueList');
+      if (!q.queued_events || q.queued_events.length === 0) {
+        listEl.innerHTML = `<div style="color:var(--text-dim); font-size:0.75rem; text-align:center; padding:4px;">(Queue is empty — Robot idle)</div>`;
+      } else {
+        listEl.innerHTML = q.queued_events.map((item, idx) => `
+          <div class="queue-item">
+            <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+              <span style="color:var(--text-muted); font-size:0.72rem;">#${idx + 1}</span>
+              <span class="p-badge p${item.priority}">P${item.priority}</span>
+              <span style="font-weight:600; font-size:0.74rem;">${item.event_type}</span>
+              <span style="color:var(--text-muted); font-size:0.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">
+                ${item.prompt.replace(/\[SYSTEM [^\]]+\]/, '').trim()}
+              </span>
+            </div>
+            <span style="color:var(--text-dim); font-size:0.7rem;">${item.source}</span>
+          </div>
+        `).join('');
+      }
+
+      // Update recent event audit drawer
+      const auditRows = document.getElementById('auditRows');
+      if (auditRows && q.recent_audit) {
+        auditRows.innerHTML = q.recent_audit.map(a => {
+          const t = new Date(a.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const statusClass = `audit-status-${a.status}`;
+          return `
+            <div class="audit-row">
+              <span>[${t}] <strong>${a.event_type}</strong> (P${a.priority})</span>
+              <span class="${statusClass}">[${a.status.toUpperCase()}] ${a.detail || ''}</span>
+            </div>
+          `;
+        }).join('');
       }
     }
 

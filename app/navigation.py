@@ -127,7 +127,7 @@ class NavigationManager:
     ):
         robot = self.get_robot()
         last_feedback_time = time.time()
-        feedback_interval = 2.0  # Send feedback event every 2 seconds
+        feedback_interval = 20.0  # Send feedback event every 2 seconds
         last_pos_for_vel, _ = robot.get_pose()
         last_vel_time = time.time()
         measured_speed = 0.15  # Rolling average ground speed (m/s)
