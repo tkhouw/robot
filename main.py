@@ -60,26 +60,50 @@ def main():
     )
     motion_sensor.start()
     app.state.motion_sensor = motion_sensor
-    print("Passive Vision Motion Detector: ACTIVE (monitoring with 10s settling delay)")
+    # 4. Optional Native MuJoCo 3D Window
+    import argparse
+    parser = argparse.ArgumentParser(description="WAVEGO Pro Cognitive Agent Gateway")
+    parser.add_argument("--gui", action="store_true", help="Launch native interactive MuJoCo 3D window alongside Web UI")
+    args, _ = parser.parse_known_args()
 
-    # 4. Display service information and usage
+    # 5. Display service information and usage
     print(f"\nModel Backend: {config.model_name}")
-    print(f"Event Gateway: http://{config.host}:{config.port}")
-    print("\nUnified Event Endpoint:")
-    print(f" - POST http://127.0.0.1:{config.port}/events")
-    print("     • user_message:   {\"source\": \"user_phone\", \"event_type\": \"user_message\", \"payload\": {\"message\": \"...\"}}")
-    print("     • doorbell_press: {\"source\": \"nest_doorbell\", \"event_type\": \"doorbell_press\", \"payload\": {\"person_name\": \"...\"}}")
-    print("     • motion_alert:   {\"source\": \"motion_sensor\", \"event_type\": \"motion_detected\", \"payload\": {...}}")
-    print(f" - GET  http://127.0.0.1:{config.port}/events/stream  (Live SSE Thought & Action Stream)")
+    print(f"Interactive Web Dashboard (Portrait / Landscape): http://{config.host}:{config.port}/")
+    print(f"Event Gateway API: http://{config.host}:{config.port}/events")
+    print(f"Live Video Stream: http://{config.host}:{config.port}/video/stream?cam=tracking_cam")
+    print(f"Live SSE Stream:   http://{config.host}:{config.port}/events/stream")
     print("=" * 65)
 
-    # 5. Serve the FastAPI Gateway
+    # 6. Serve the FastAPI Gateway & Optional Native 3D Viewer
+    # Note: On Linux/X11/Wayland, GLFW requires window creation to occur on the MAIN thread.
     try:
-        uvicorn.run(app, host=config.host, port=config.port)
+        if args.gui and hasattr(robot, "launch_viewer"):
+            import threading
+            print("Launching native MuJoCo 3D Interactive Window on main thread...")
+            server_config = uvicorn.Config(
+                app,
+                host=config.host,
+                port=config.port,
+                log_level="info",
+                timeout_graceful_shutdown=1,
+            )
+            server = uvicorn.Server(server_config)
+            server_thread = threading.Thread(target=server.run, daemon=True, name="UvicornServerThread")
+            server_thread.start()
+
+            # Run interactive viewer on the main thread
+            try:
+                robot.launch_viewer()
+            finally:
+                server.should_exit = True
+                server_thread.join(timeout=1.5)
+        else:
+            uvicorn.run(app, host=config.host, port=config.port, timeout_graceful_shutdown=1)
     finally:
         motion_sensor.stop()
 
 
 if __name__ == "__main__":
     main()
+
 

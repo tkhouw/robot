@@ -127,7 +127,7 @@ class NavigationManager:
     ):
         robot = self.get_robot()
         last_feedback_time = time.time()
-        feedback_interval = 2.0  # Send feedback event every 2 seconds
+        feedback_interval = 20.0  # Send feedback event every 2 seconds
         last_pos_for_vel, _ = robot.get_pose()
         last_vel_time = time.time()
         measured_speed = 0.15  # Rolling average ground speed (m/s)
@@ -209,8 +209,8 @@ class NavigationManager:
                     lr_correction = max(-25.0, min(25.0, heading_err * 1.5))
                     robot.walk(fb=50.0, lr=lr_correction)
 
-                # Advance physics in simulation if available
-                if hasattr(robot, "step"):
+                # Advance physics in simulation if available (and if not driven by active 3D viewer)
+                if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
                     robot.step()
 
                 # Calculate true rolling speed and ETA

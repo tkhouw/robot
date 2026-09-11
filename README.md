@@ -211,8 +211,11 @@ robot/
 │   ├── config.py               # Pydantic settings: OpenRouter API, model, landmarks, server port
 │   ├── tools.py                # Typed Google ADK tools (walk_forward, docking, vision, gestures)
 │   ├── agent.py                # Google ADK Cognitive Agent using OpenRouter DeepSeek vision
+│   ├── navigation.py           # Closed-loop landmark navigation worker, heading controller, stall detection
 │   ├── vision_sensor.py        # Passive low-cost frame-differencing motion detector
-│   └── gateway.py              # FastAPI REST & SSE Event Stream Server (Nest Doorbell, voice)
+│   ├── gateway.py              # FastAPI REST, SSE Event Stream Server, and Priority Event Queue
+│   └── templates/
+│       └── dashboard.html      # Mission Control Web Dashboard (dual cameras, interactive map, cognition feed)
 │
 ├── wavego_protocol.py          # Official Waveshare JSON command constants & packet format
 ├── robot_interface.py          # Abstract BaseRobot interface & PhysicalRobotController (Serial)
@@ -231,18 +234,20 @@ robot/
 
 1. **Cognitive Agent & Tools ([`app/agent.py`](app/agent.py), [`app/tools.py`](app/tools.py))**:
    Powered by Google ADK with OpenRouter (`deepseek/deepseek-v4-flash-vision-exp`). The agent has access to granular locomotion tools (`walk_forward`, `walk_backward`, `turn_left`, `turn_right`), home navigation (`navigate_to_landmark`, `return_to_charging_dock`), multimodal vision (`capture_camera_image`), greeting gestures (`perform_handshake`), and speech announcements (`announce_message`).
-2. **Event Ingestion Gateway ([`app/gateway.py`](app/gateway.py))**:
-   FastAPI web service that receives external webhooks (such as Google Home Nest doorbell rings with facial recognition metadata) and user voice/text commands, and broadcasts the agent's real-time reasoning and actions over Server-Sent Events (`/events/stream`).
-3. **Passive Vision Motion Sensor ([`app/vision_sensor.py`](app/vision_sensor.py))**:
+2. **Autonomous Closed-Loop Navigation Engine ([`app/navigation.py`](app/navigation.py))**:
+   Manages closed-loop waypoint navigation between smart home landmarks with proportional heading correction, automatic stall/obstacle detection via odometry delta monitoring, and priority event triggers (`nav_completed`, `nav_stalled`, `nav_feedback`).
+3. **Event Ingestion Gateway & Priority Queue ([`app/gateway.py`](app/gateway.py))**:
+   FastAPI web service hosting an `asyncio.PriorityQueue` (`P0` Urgent user commands, `P1` High-priority doorbell rings and stall alerts, `P2` Normal navigation feedback, `P3` Background motion). Broadcasts robot telemetry, queue states, and native ADK cognitive events over Server-Sent Events (`/events/stream`).
+4. **Passive Vision Motion Sensor ([`app/vision_sensor.py`](app/vision_sensor.py))**:
    Zero-cost local frame differencing running at 2 FPS on the robot's front eye-level camera. Detects scene motion without calling external LLM APIs, firing events only when movement occurs.
-4. **Hardware Abstraction Layer ([`robot_interface.py`](robot_interface.py), [`wavego_protocol.py`](wavego_protocol.py))**:
+5. **Hardware Abstraction Layer ([`robot_interface.py`](robot_interface.py), [`wavego_protocol.py`](wavego_protocol.py))**:
    Universal `BaseRobot` interface compiling commands into official Waveshare JSON packets ($T=110, 111, 112, 113, 114$). Swappable between simulation (`WavegoSim`) and real hardware (`PhysicalRobotController`).
-5. **Physics Digital Twin & Kinematics ([`sim.py`](sim.py), [`wavego_kinematics.py`](wavego_kinematics.py))**:
+6. **Physics Digital Twin & Kinematics ([`sim.py`](sim.py), [`wavego_kinematics.py`](wavego_kinematics.py))**:
    MuJoCo 500 Hz simulation of the authentic 4-bar linkage mechanism with low-pass servo rate filtering and off-screen camera rendering.
 
 ---
 
-## 6. Quickstart & Interactive Viewer
+## 6. Quickstart & Mission Control Dashboard
 
 ### Environment Setup
 This repository uses `uv` for fast, isolated Python environment management.
@@ -257,35 +262,61 @@ This repository uses `uv` for fast, isolated Python environment management.
    echo "OPENROUTER_API_KEY=your_key_here" > .env
    ```
 
-### Running the Cognitive Agent & Event Gateway
-Start the robot driver, passive vision motion sensor, and FastAPI event gateway:
+### Starting the System
+Start the robot driver, navigation worker, passive vision motion sensor, and web gateway:
 ```bash
 uv run python main.py
 ```
 
-#### Triggering External Events (e.g. Nest Doorbell):
-Send a simulated Google Nest doorbell event with facial recognition data:
+### Accessing the Web Dashboard
+Open your browser and navigate to:
+```
+http://localhost:8000/
+```
+
+The **Smart Home Mission Control Dashboard** provides a unified real-time operations console:
+
+1. **Dual-Camera Live MJPEG Video Stream**:
+   - Toggle between the **Tracking Camera** (3rd-person isometric spectator view) and the **Front Camera** (robot's first-person eye level).
+2. **Interactive 2D Landmark Arena Map**:
+   - **Full Edge-to-Edge Responsive Canvas**: Automatically resizes to fit your browser or display pane with true 1:1 metric scale.
+   - **Height Presets & Draggable Handle**: Toggle between **S** (220px), **M** (340px), and **L** (500px), or drag the bottom-right corner to any custom height.
+   - **Click-to-Navigate**: Click directly on any landmark (⚡ **Dock**, 🚪 **Front Door**, 🛋️ **Living Room**, 🍳 **Kitchen**) to dispatch the robot to that location.
+   - **Dynamic Odometry Trail & Nav Target**: Visualizes the robot's path across the floor in real-time, with a dashed guide line pointing toward the active destination.
+   - **Hover Coordinates**: Real-time metric readout (`X: 1.20m, Y: 0.00m`) follows your mouse.
+3. **Stimulus Dispatch Station**:
+   - **🔔 Ring Doorbell**: Triggers a simulated visitor event with custom visitor names (e.g. *Alice*).
+   - **⚡ Return to Dock**: Sends an urgent command for the robot to return to its home base and crouch onto charging contact plates.
+   - **🛑 Emergency Stop**: Immediately cuts motor drive and halts navigation.
+   - **Interactive User Prompt Box**: Send natural language requests directly to the agent (e.g., *"Walk forward 0.5 meters and look around"*).
+4. **RobotStimulusEvent Priority Queue Visualizer**:
+   - Displays real-time **Active Processing** task status with priority badge (`P0`, `P1`, `P2`, `P3`).
+   - Live list of waiting events in the priority queue.
+   - Collapsible **Audit Log Drawer** recording timestamped history of enqueued, completed, and dropped events.
+5. **Real-Time Cognition & Action Feed**:
+   - **💭 Agent Thoughts**: Displays internal LLM reasoning and scene interpretation in purple.
+   - **🛠️ Action Calls**: Green cards displaying exact tool executions with typed keyword arguments (e.g. `navigate_to_landmark(landmark_name="front_door")`).
+   - **📥 Tool Results**: Cyan/slate cards displaying execution feedback.
+   - **📢 Spoken Announcements**: Warm amber cards highlighting speech announced through the robot's speaker (`announce_message`).
+   - **Auto-Collapsing Cards**: Any entry longer than 2 lines automatically collapses with a `▾ click to expand` toggle, keeping the feed clean and readable.
+
+### External Webhook Triggers (cURL API)
+You can also trigger events externally via HTTP:
+
 ```bash
+# Simulate a smart doorbell ring with facial recognition metadata
 curl -X POST http://127.0.0.1:8000/events \
      -H "Content-Type: application/json" \
      -d '{"source": "nest_doorbell", "event_type": "doorbell_press", "payload": {"person_name": "Alice"}}'
-```
-The robot will autonomously plan its route to the front door, inspect the scene, and announce a personalized greeting to Alice.
 
-#### Sending User Messages / Queries from Phone or Laptop:
-```bash
+# Send a user message / request
 curl -X POST http://127.0.0.1:8000/events \
      -H "Content-Type: application/json" \
-     -d '{"source": "user_phone", "event_type": "user_message", "payload": {"message": "Can you check if you have enough battery, and then return to the charging dock?"}}'
+     -d '{"source": "user_phone", "event_type": "user_message", "payload": {"message": "Please go check the kitchen."}}'
 ```
 
-#### Listening to Live Agent Thoughts (SSE Feed):
-```bash
-curl -N http://127.0.0.1:8000/events/stream
-```
-
-### Interactive Manual Simulation Demo
-To test physical gaits, single-leg IK, and keyboard teleoperation directly in the MuJoCo viewer:
+### Standalone Kinematics & Visualizer Demo
+To test physical gaits, single-leg IK, and keyboard teleoperation directly in the native MuJoCo interactive viewer:
 ```bash
 uv run python demo.py
 ```

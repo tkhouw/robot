@@ -6,7 +6,8 @@ with the official Waveshare BodyCtrl kinematics and JSON command interface.
 
 import math
 import time
-from typing import Dict, Any, Tuple, Union
+import threading
+from typing import Dict, Any, Tuple, Union, List
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -74,6 +75,10 @@ class WavegoSim(BaseRobot):
         # Motion queue for sequential gestures (e.g. handshake)
         self.motion_queue: List[List[float]] = []
 
+        # Thread safety lock & persistent renderer cache to prevent GLFW context recreation crashes
+        self._lock = threading.Lock()
+        self._renderers: Dict[tuple, mujoco.Renderer] = {}
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -125,12 +130,20 @@ class WavegoSim(BaseRobot):
         self.filtered_ctrl += alpha * (target_rad - self.filtered_ctrl)
         self.data.ctrl[:] = self.filtered_ctrl
 
+    def _get_renderer(self, width: int, height: int) -> mujoco.Renderer:
+        """Retrieves or creates a cached persistent Renderer instance for the given resolution."""
+        key = (width, height)
+        if key not in self._renderers:
+            self._renderers[key] = mujoco.Renderer(self.model, height=height, width=width)
+        return self._renderers[key]
+
     def step(self, dt: float = None):
         """Advances physics and kinematics by one timestep."""
         if dt is None:
             dt = self.model.opt.timestep
-        self.update_gait(dt)
-        mujoco.mj_step(self.model, self.data)
+        with self._lock:
+            self.update_gait(dt)
+            mujoco.mj_step(self.model, self.data)
 
     def send_cmd(self, cmd: Union[Dict[str, Any], str]):
         """
@@ -225,8 +238,9 @@ class WavegoSim(BaseRobot):
 
     def get_pose(self) -> Tuple[np.ndarray, np.ndarray]:
         """Returns (x, y, z) position and orientation quaternion [w, x, y, z]."""
-        pos = self.data.qpos[0:3].copy()
-        quat = self.data.qpos[3:7].copy()
+        with self._lock:
+            pos = self.data.qpos[0:3].copy()
+            quat = self.data.qpos[3:7].copy()
         return pos, quat
 
     def get_imu(self) -> Tuple[float, float, float]:
@@ -234,7 +248,8 @@ class WavegoSim(BaseRobot):
         Returns estimated Euler angles (roll, pitch, yaw) in degrees from quaternion.
         Matches onboard physical MPU6050 output.
         """
-        w, x, y, z = self.data.qpos[3:7]
+        with self._lock:
+            w, x, y, z = self.data.qpos[3:7]
         # Roll (x-axis rotation)
         sinr_cosp = 2 * (w * x + y * z)
         cosr_cosp = 1 - 2 * (x * x + y * y)
@@ -251,25 +266,43 @@ class WavegoSim(BaseRobot):
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
-    def get_camera_image(self, width: int = 320, height: int = 240) -> bytes:
+    def get_camera_image(
+        self, width: int = 320, height: int = 240, camera_name: str = "front_camera"
+    ) -> bytes:
         """
-        Renders an RGB image from the front-facing eye-level camera
+        Renders an RGB image from the specified camera ('front_camera' or 'tracking_cam')
         and returns PNG encoded bytes.
         """
         import io
         from PIL import Image
 
-        if not hasattr(self, "_renderer") or self._renderer is None:
-            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
-        elif self._renderer.height != height or self._renderer.width != width:
-            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
-
-        self._renderer.update_scene(self.data, camera="front_camera")
-        rgb_array = self._renderer.render()
+        with self._lock:
+            renderer = self._get_renderer(width, height)
+            renderer.update_scene(self.data, camera=camera_name)
+            rgb_array = renderer.render()
 
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    def get_jpeg_frame(
+        self, camera_name: str = "tracking_cam", width: int = 480, height: int = 360, quality: int = 75
+    ) -> bytes:
+        """
+        Fast JPEG rendering for live web streaming over MJPEG.
+        """
+        import io
+        from PIL import Image
+
+        with self._lock:
+            renderer = self._get_renderer(width, height)
+            renderer.update_scene(self.data, camera=camera_name)
+            rgb_array = renderer.render()
+
+        img = Image.fromarray(rgb_array)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
         return buf.getvalue()
 
     def launch_viewer(self, target_fps: int = 30, key_callback=None):
@@ -281,19 +314,27 @@ class WavegoSim(BaseRobot):
         render_interval = 1.0 / target_fps
         sim_dt = self.model.opt.timestep
         last_render_time = time.time()
+        self.has_active_viewer = True
 
-        with mujoco.viewer.launch_passive(self.model, self.data, key_callback=key_callback) as viewer:
-            viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+        try:
+            with self._lock:
+                viewer_cm = mujoco.viewer.launch_passive(self.model, self.data, key_callback=key_callback)
 
-            while viewer.is_running():
-                now = time.time()
-                self.step()
+            with viewer_cm as viewer:
+                viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
 
-                if now - last_render_time >= render_interval:
-                    viewer.sync()
-                    last_render_time = now
+                while viewer.is_running():
+                    now = time.time()
+                    self.step()
 
-                elapsed = time.time() - now
-                sleep_time = sim_dt - elapsed
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                    if now - last_render_time >= render_interval:
+                        with self._lock:
+                            viewer.sync()
+                        last_render_time = now
+
+                    elapsed = time.time() - now
+                    sleep_time = sim_dt - elapsed
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+        finally:
+            self.has_active_viewer = False

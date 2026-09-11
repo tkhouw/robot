@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAVEGO Pro Cognitive Control Center</title>
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --card-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-dim: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #2ea043;
+      --accent-red: #da3633;
+      --accent-yellow: #d29922;
+      --accent-purple: #bc8cff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Header */
+    header {
+      background-color: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { font-size: 1.15rem; font-weight: 600; color: #f0f6fc; }
+    .status-pill {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background-color: #238636;
+      color: #fff;
+      font-weight: 600;
+    }
+    .layout-toggle-btn {
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .layout-toggle-btn:hover { background: #30363d; }
+
+    /* Main Container (Supports Portrait Stacked & Landscape Side-by-Side) */
+    .app-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    /* Side-by-Side layout */
+    .app-container.layout-side {
+      flex-direction: row;
+    }
+    /* Stacked (Portrait) layout */
+    .app-container.layout-stacked {
+      flex-direction: column;
+    }
+
+    /* Left / Top Viewport Column */
+    .viewport-pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      background-color: #090d13;
+      overflow-y: auto;
+    }
+    .layout-side .viewport-pane { width: 50%; min-width: 480px; }
+    .layout-stacked .viewport-pane { width: 100%; height: 50%; border-right: none; border-bottom: 1px solid var(--border-color); }
+
+    .video-wrapper {
+      position: relative;
+      background: #000;
+      width: 100%;
+      height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .video-wrapper img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .video-overlay-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 6px;
+    }
+    .cam-btn {
+      background: rgba(22, 27, 34, 0.85);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+    .cam-btn.active { background: var(--accent-blue); }
+
+    /* Telemetry & Mini-Map */
+    .telemetry-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 12px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .telem-card {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .telem-card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; }
+    .telem-card .val { font-size: 0.95rem; font-weight: 600; color: #f0f6fc; margin-top: 2px; }
+
+    .map-container {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .map-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .map-header h3 {
+      font-size: 0.85rem;
+      color: #f0f6fc;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .map-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .map-size-btn {
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--text-dim);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .map-size-btn:hover, .map-size-btn.active {
+      background: #30363d;
+      color: #fff;
+      border-color: #58a6ff;
+    }
+    .map-wrapper {
+      position: relative;
+      width: 100%;
+      height: 320px;
+      min-height: 180px;
+      max-height: 600px;
+      resize: vertical;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #0d1117;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    }
+    .arena-map {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      padding: 4px 2px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .legend-item:hover {
+      background: #21262d;
+      color: #fff;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .landmark-node {
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .landmark-node:hover {
+      filter: drop-shadow(0 0 6px rgba(88, 166, 255, 0.8));
+    }
+    .map-coords-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(13, 17, 23, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      pointer-events: none;
+      font-family: monospace;
+    }
+
+    /* Right / Bottom Control & Cognition Column */
+    .control-pane {
+      display: flex;
+      flex-direction: column;
+      background-color: var(--card-bg);
+      overflow: hidden;
+    }
+    .layout-side .control-pane { width: 50%; }
+    .layout-stacked .control-pane { width: 100%; height: 50%; }
+
+    /* Stimulus Buttons */
+    .stimulus-section {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #161b22;
+      flex-shrink: 0;
+    }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+    .trigger-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease-in-out;
+    }
+    .btn-doorbell { background: #1f6feb; color: #fff; }
+    .btn-doorbell:hover { background: #388bfd; }
+    .btn-dock { background: #238636; color: #fff; }
+    .btn-dock:hover { background: #2ea043; }
+    .btn-stop { background: var(--accent-red); color: #fff; font-weight: 700; }
+    .btn-stop:hover { background: #f85149; }
+    .btn-action { background: #21262d; border-color: var(--border-color); color: var(--text-main); }
+    .btn-action:hover { background: #30363d; }
+
+    .doorbell-input-box {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .doorbell-input-box input {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      width: 140px;
+    }
+
+    /* Navigation Progress Banner */
+    .nav-progress-card {
+      display: none;
+      padding: 8px 12px;
+      background: #1f2a37;
+      border-bottom: 1px solid #374151;
+      font-size: 0.85rem;
+    }
+    .nav-progress-card.active { display: block; }
+    .progress-bar-bg {
+      background: #374151;
+      border-radius: 4px;
+      height: 8px;
+      width: 100%;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      background: var(--accent-yellow);
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    /* Real-Time Cognition Stream */
+    .feed-container {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .feed-card {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      animation: fadeIn 0.2s ease-in;
+      position: relative;
+      transition: background 0.15s ease;
+    }
+    .feed-card.is-collapsible {
+      cursor: pointer;
+    }
+    .feed-card.is-collapsible:hover {
+      background: #161b22;
+    }
+    .feed-card-content {
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+    .feed-card.expanded .feed-card-content {
+      -webkit-line-clamp: unset;
+      display: block;
+      overflow: visible;
+    }
+    .feed-expand-btn {
+      display: none;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+      user-select: none;
+    }
+    .feed-card.is-collapsible .feed-expand-btn {
+      display: inline-block;
+    }
+    .feed-card.is-collapsible:hover .feed-expand-btn {
+      color: #58a6ff;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .card-thought { border-left: 3px solid var(--accent-purple); color: #e6edf3; }
+    .card-tool { border-left: 3px solid var(--accent-green); background: #0c1810; }
+    .card-tool code { color: #56d364; font-weight: 600; }
+    .card-tool-result { border-left: 3px solid #388bfd; background: #0c1626; color: #79c0ff; font-family: monospace; font-size: 0.8rem; }
+    .card-announce { border-left: 3px solid #d29922; background: #261c0c; color: #f0e6d2; }
+    .card-prompt { border-left: 3px solid var(--accent-blue); background: #0d1829; }
+    .card-stall { border-left: 3px solid var(--accent-red); background: #260d0d; color: #ff7b72; }
+    .card-alert { border-left: 3px solid var(--accent-red); background: #2b1111; color: #ff7b72; font-weight: 600; }
+    .card-completed { border-left: 3px solid var(--accent-yellow); background: #1f1b0d; }
+
+    /* Event Queue Monitor Widget */
+    .queue-section {
+      background: #161b22;
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 12px;
+      font-size: 0.82rem;
+    }
+    .queue-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .queue-badge-count {
+      background: var(--accent-blue);
+      color: #fff;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .active-task-box {
+      background: #0f1e2e;
+      border: 1px solid #1f6feb;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .active-task-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #79c0ff;
+      font-weight: 600;
+    }
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 110px;
+      overflow-y: auto;
+    }
+    .queue-item {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      padding: 4px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+    }
+    .p-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .p0 { background: #f85149; color: #fff; }
+    .p1 { background: #d29922; color: #000; }
+    .p2 { background: #1f6feb; color: #fff; }
+    .p3 { background: #484f58; color: #c9d1d9; }
+
+    .audit-drawer-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.72rem;
+      padding: 2px 4px;
+      text-decoration: underline;
+    }
+    .audit-drawer-btn:hover { color: #fff; }
+    .audit-container {
+      margin-top: 6px;
+      max-height: 100px;
+      overflow-y: auto;
+      background: #090d12;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-family: monospace;
+      font-size: 0.72rem;
+    }
+    .audit-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+      border-bottom: 1px solid #1e242c;
+    }
+    .audit-status-dropped { color: #ff7b72; font-weight: 600; }
+    .audit-status-enqueued { color: #7ee787; }
+    .audit-status-completed { color: #a5d6ff; }
+
+    /* Chat Bar */
+    .chat-section {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border-color);
+      background: #161b22;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .chat-input:focus { border-color: var(--accent-blue); }
+    .chat-send-btn {
+      background: #238636;
+      border: none;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .chat-send-btn:hover { background: #2ea043; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <h1>🤖 WAVEGO Pro Cognitive Agent</h1>
+      <span class="status-pill" id="agentStatusBadge">Agent: Idle</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="layout-toggle-btn" id="layoutToggleBtn" onclick="toggleLayout()">
+        📐 Layout: Side-by-Side
+      </button>
+    </div>
+  </header>
+
+  <!-- App Body Layout -->
+  <div class="app-container layout-side" id="appContainer">
+
+    <!-- LEFT / TOP PANE: MuJoCo Live Visualizer & Map -->
+    <div class="viewport-pane">
+      <div class="video-wrapper">
+        <img id="mjpegStream" src="/video/stream?cam=tracking_cam" alt="MuJoCo Simulation Stream">
+        <div class="video-overlay-controls">
+          <button class="cam-btn active" id="btnTrackingCam" onclick="switchCam('tracking_cam')">🌐 3rd-Person</button>
+          <button class="cam-btn" id="btnFrontCam" onclick="switchCam('front_camera')">👁️ Robot Eye</button>
+        </div>
+      </div>
+
+      <!-- Real-Time Telemetry Badges -->
+      <div class="telemetry-row">
+        <div class="telem-card">
+          <div class="label">Position (X, Y)</div>
+          <div class="val" id="telemPos">0.00, 0.00 m</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Heading (Yaw)</div>
+          <div class="val" id="telemYaw">0.0°</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Nav Target</div>
+          <div class="val" id="telemGoal">None</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Motion Guard</div>
+          <div class="val" id="telemMotion">Active</div>
+        </div>
+      </div>
+
+      <!-- 2D Landmark Arena Map -->
+      <div class="map-container">
+        <div class="map-header">
+          <h3>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+            Smart Home Landmark Arena
+          </h3>
+          <div class="map-controls">
+            <span style="font-size: 0.7rem; color: var(--text-dim); margin-right: 4px;">Height:</span>
+            <button class="map-size-btn" onclick="setMapSize(220)" id="btnSizeS">S</button>
+            <button class="map-size-btn active" onclick="setMapSize(340)" id="btnSizeM">M</button>
+            <button class="map-size-btn" onclick="setMapSize(500)" id="btnSizeL">L</button>
+            <button class="map-size-btn" onclick="clearOdometryTrail()" title="Clear odometry path">Clear Trail</button>
+          </div>
+        </div>
+
+        <div class="map-wrapper" id="mapWrapper">
+          <svg class="arena-map" id="arenaSvg" viewBox="-0.5 -1.0 2.2 2.0" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <!-- Marker Glow Filters -->
+              <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="0.03" flood-color="#238636" flood-opacity="0.8"/>
+              </filter>
+              <filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="0.03" flood-color="#1f6feb" flood-opacity="0.8"/>
+              </filter>
+              <filter id="glowPurple" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="0.03" flood-color="#bc8cff" flood-opacity="0.8"/>
+              </filter>
+              <filter id="glowOrange" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="0.03" flood-color="#d29922" flood-opacity="0.8"/>
+              </filter>
+              <filter id="glowRed" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="0.04" flood-color="#f85149" flood-opacity="0.9"/>
+              </filter>
+              <linearGradient id="robotBeam" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#f85149" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#f85149" stop-opacity="0.0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Dynamic Background Grid Layer filling the full viewport -->
+            <g id="mapGridLayer"></g>
+
+            <!-- Active Navigation Target Vector (Dashed Line) -->
+            <line id="navTargetLine" x1="0" y1="0" x2="0" y2="0" stroke="#58a6ff" stroke-width="0.012" stroke-dasharray="0.04,0.03" opacity="0"/>
+
+            <!-- Live Robot Odometry Trail -->
+            <polyline id="odometryTrail" fill="none" stroke="#f85149" stroke-width="0.008" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+
+            <!-- Landmark 1: Charging Dock (0.0, 0.0) -->
+            <g class="landmark-node" id="nodeDock" transform="translate(0.0, 0.0)" onclick="handleLandmarkClick('charging_dock', 'Charging Dock')">
+              <circle r="0.075" fill="#238636" fill-opacity="0.25" filter="url(#glowGreen)"/>
+              <circle r="0.05" fill="#238636" stroke="#2ea043" stroke-width="0.01"/>
+              <rect x="-0.025" y="-0.025" width="0.05" height="0.05" rx="0.01" fill="#fff"/>
+            </g>
+
+            <!-- Landmark 2: Front Door (1.2, 0.0) -> SVG Y=0.0 -->
+            <g class="landmark-node" id="nodeDoor" transform="translate(1.2, 0.0)" onclick="handleLandmarkClick('front_door', 'Front Door')">
+              <circle r="0.075" fill="#1f6feb" fill-opacity="0.25" filter="url(#glowBlue)"/>
+              <circle r="0.05" fill="#1f6feb" stroke="#388bfd" stroke-width="0.01"/>
+              <rect x="-0.02" y="-0.03" width="0.04" height="0.06" rx="0.005" fill="#fff"/>
+            </g>
+
+            <!-- Landmark 3: Living Room (0.6, 0.5) -> Inverted MuJoCo +Y is SVG -Y (-0.5) -->
+            <g class="landmark-node" id="nodeLiving" transform="translate(0.6, -0.5)" onclick="handleLandmarkClick('living_room', 'Living Room')">
+              <circle r="0.075" fill="#bc8cff" fill-opacity="0.25" filter="url(#glowPurple)"/>
+              <circle r="0.05" fill="#8957e5" stroke="#bc8cff" stroke-width="0.01"/>
+              <circle r="0.02" fill="#fff"/>
+            </g>
+
+            <!-- Landmark 4: Kitchen (0.8, -0.6) -> Inverted MuJoCo -Y is SVG +Y (+0.6) -->
+            <g class="landmark-node" id="nodeKitchen" transform="translate(0.8, 0.6)" onclick="handleLandmarkClick('kitchen', 'Kitchen')">
+              <circle r="0.075" fill="#d29922" fill-opacity="0.25" filter="url(#glowOrange)"/>
+              <circle r="0.05" fill="#bb8009" stroke="#f0883e" stroke-width="0.01"/>
+              <circle r="0.02" fill="#fff"/>
+            </g>
+
+            <!-- Animated Robot Marker with FOV Cone -->
+            <g id="robotMarker" transform="translate(0.0, 0.0)">
+              <!-- Vision / Heading Cone -->
+              <polygon points="0,0 0.35,-0.12 0.35,0.12" fill="url(#robotBeam)"/>
+              <!-- Chassis Circle -->
+              <circle r="0.055" fill="#da3633" filter="url(#glowRed)" stroke="#f85149" stroke-width="0.012"/>
+              <!-- Direction Heading Arrow -->
+              <polygon points="-0.03,-0.035 0.05,0 -0.03,0.035" fill="#ffffff"/>
+              <!-- Center Hub -->
+              <circle r="0.015" fill="#f85149"/>
+            </g>
+          </svg>
+
+          <!-- Interactive Hover Coordinates Readout -->
+          <div class="map-coords-badge" id="mapCoords">X: 0.00m, Y: 0.00m</div>
+        </div>
+
+        <!-- Landmark Legend & Click-to-Send Quickbar -->
+        <div class="map-legend">
+          <div class="legend-item" onclick="handleLandmarkClick('charging_dock', 'Charging Dock')" title="Click to send robot here">
+            <span class="legend-dot" style="background: #238636;"></span>
+            <strong>Dock</strong> (0.0, 0.0)
+          </div>
+          <div class="legend-item" onclick="handleLandmarkClick('front_door', 'Front Door')" title="Click to send robot here">
+            <span class="legend-dot" style="background: #1f6feb;"></span>
+            <strong>Front Door</strong> (1.2, 0.0)
+          </div>
+          <div class="legend-item" onclick="handleLandmarkClick('living_room', 'Living Room')" title="Click to send robot here">
+            <span class="legend-dot" style="background: #bc8cff;"></span>
+            <strong>Living Room</strong> (0.6, +0.5)
+          </div>
+          <div class="legend-item" onclick="handleLandmarkClick('kitchen', 'Kitchen')" title="Click to send robot here">
+            <span class="legend-dot" style="background: #d29922;"></span>
+            <strong>Kitchen</strong> (0.8, -0.6)
+          </div>
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 4px; font-style: italic;">
+            💡 Click any landmark to send robot
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT / BOTTOM PANE: Stimulus Station & ADK Cognition -->
+    <div class="control-pane">
+
+      <!-- Stimulus Station -->
+      <div class="stimulus-section">
+        <div class="section-title">Trigger Robot Stimulus Events</div>
+        <div class="trigger-buttons">
+          <div class="doorbell-input-box">
+            <input type="text" id="visitorNameInput" placeholder="Visitor Name (Alice)" value="Alice">
+            <button class="btn btn-doorbell" onclick="triggerDoorbell()">🔔 Ring Doorbell</button>
+          </div>
+          <button class="btn btn-dock" onclick="sendToDock()">⚡ Send to Dock</button>
+          <button class="btn btn-stop" onclick="triggerEmergencyStop()">🛑 STOP</button>
+          <button class="btn btn-action" onclick="triggerHandshake()">🐾 Handshake</button>
+          <button class="btn btn-action" onclick="triggerMotion()">👁️ Motion Alert</button>
+        </div>
+      </div>
+
+      <!-- Priority Event Queue Monitor & Inspector -->
+      <div class="queue-section" id="queueSection">
+        <div class="queue-title-row">
+          <strong>⚡ RobotStimulusEvent Priority Queue</strong>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="queue-badge-count" id="queueCountBadge">0 Queued</span>
+            <button class="audit-drawer-btn" onclick="toggleAuditDrawer()">Audit Log ▾</button>
+          </div>
+        </div>
+
+        <!-- Active Task Banner -->
+        <div class="active-task-box" id="activeTaskBox" style="display:none;">
+          <div class="active-task-header">
+            <span>⚙️ ACTIVE PROCESSING (<span id="activeSource"></span>)</span>
+            <span class="p-badge" id="activePBadge">P1</span>
+          </div>
+          <div id="activePrompt" style="font-size:0.77rem; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+        </div>
+
+        <!-- Waiting Queue Items -->
+        <div class="queue-list" id="queueList">
+          <div style="color:var(--text-dim); font-size:0.75rem; text-align:center; padding:4px;">(Queue is empty — Robot idle)</div>
+        </div>
+
+        <!-- Audit Drawer (Hidden by default) -->
+        <div class="audit-container" id="auditContainer" style="display:none;">
+          <div id="auditRows"></div>
+        </div>
+      </div>
+
+      <!-- Navigation Live Progress Widget -->
+      <div class="nav-progress-card" id="navProgressCard">
+        <div style="display: flex; justify-content: space-between;">
+          <strong id="navStatusText">Navigating to Front Door...</strong>
+          <span id="navEtaText">ETA: 4.2s (0.5m)</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="navProgressBar"></div>
+        </div>
+      </div>
+
+      <!-- Real-Time ADK Cognition Feed -->
+      <div class="feed-container" id="feedContainer">
+        <div class="feed-card card-prompt">
+          <strong>System Ready:</strong> Event Gateway active on port 8000. Send a stimulus event or message below to start reasoning.
+        </div>
+      </div>
+
+      <!-- User Chat Input -->
+      <form class="chat-section" onsubmit="sendUserMessage(event)">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Say something or give an instruction... (e.g. 'Walk forward and check front door')">
+        <button type="submit" class="chat-send-btn">Send</button>
+      </form>
+    </div>
+
+  </div>
+
+  <script>
+    let currentCam = 'tracking_cam';
+    let isStacked = false;
+
+    // Detect saved layout or vertical monitor
+    if (localStorage.getItem('layout') === 'stacked' || window.innerHeight > window.innerWidth) {
+      setStackedLayout(true);
+    }
+
+    function toggleLayout() {
+      setStackedLayout(!isStacked);
+    }
+
+    function setStackedLayout(stacked) {
+      isStacked = stacked;
+      const container = document.getElementById('appContainer');
+      const btn = document.getElementById('layoutToggleBtn');
+      if (isStacked) {
+        container.className = 'app-container layout-stacked';
+        btn.textContent = '📐 Layout: Stacked (Portrait)';
+        localStorage.setItem('layout', 'stacked');
+      } else {
+        container.className = 'app-container layout-side';
+        btn.textContent = '📐 Layout: Side-by-Side';
+        localStorage.setItem('layout', 'side');
+      }
+    }
+
+    function switchCam(camName) {
+      currentCam = camName;
+      document.getElementById('mjpegStream').src = `/video/stream?cam=${camName}&t=${Date.now()}`;
+      document.getElementById('btnTrackingCam').classList.toggle('active', camName === 'tracking_cam');
+      document.getElementById('btnFrontCam').classList.toggle('active', camName === 'front_camera');
+    }
+
+    function setServerOffline(reason) {
+      const badge = document.getElementById('agentStatusBadge');
+      if (badge && badge.textContent !== 'Server: Offline') {
+        badge.textContent = 'Server: Offline';
+        badge.style.backgroundColor = '#6e7681';
+        appendCard('card-alert', `🛑 <strong>Server Disconnected:</strong> ${reason || 'Backend server stopped.'}`);
+        const streamImg = document.getElementById('mjpegStream');
+        if (streamImg) {
+          streamImg.style.opacity = '0.35';
+          streamImg.style.filter = 'grayscale(100%)';
+        }
+      }
+      if (window.evtSource) {
+        window.evtSource.close();
+      }
+    }
+
+    // Connect to SSE stream
+    const evtSource = new EventSource("/events/stream");
+    window.evtSource = evtSource;
+
+    evtSource.onmessage = function(e) {
+      try {
+        const payload = JSON.parse(e.data);
+        handleStreamEvent(payload);
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    };
+
+    evtSource.onerror = function(err) {
+      setServerOffline("Connection to server closed.");
+    };
+
+    function handleStreamEvent(event) {
+      const feed = document.getElementById('feedContainer');
+      const badge = document.getElementById('agentStatusBadge');
+
+      if (event.type === 'agent_turn_start') {
+        badge.textContent = 'Agent: Reasoning...';
+        badge.style.backgroundColor = '#d29922';
+        appendCard('card-prompt', `<strong>Stimulus Triggered:</strong> ${event.data.prompt}`);
+      } else if (event.type === 'agent_turn_complete') {
+        badge.textContent = 'Agent: Idle';
+        badge.style.backgroundColor = '#238636';
+      } else if (event.type === 'agent_adk_event') {
+        const data = event.data;
+
+        // 1. Tool / Function Calls (via content.parts.function_call or actions.tool_calls)
+        if (data.content && data.content.parts) {
+          data.content.parts.forEach(p => {
+            if (p.function_call) {
+              const fc = p.function_call;
+              const argsStr = Object.entries(fc.args || {})
+                .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                .join(', ');
+
+              if (fc.name === 'announce_message') {
+                const msg = (fc.args && fc.args.message) ? fc.args.message : JSON.stringify(fc.args);
+                appendCard('card-announce', `📢 <strong>Spoken Announcement:</strong> &ldquo;${msg}&rdquo;`);
+              } else {
+                appendCard('card-tool', `🛠️ <strong>Action:</strong> <code>${fc.name}(${argsStr})</code>`);
+              }
+            }
+
+            // 2. Tool Results / Responses
+            if (p.function_response) {
+              const fr = p.function_response;
+              let resStr = typeof fr.response === 'object' ? JSON.stringify(fr.response) : String(fr.response);
+              appendCard('card-tool-result', `📥 <strong>Result [${fr.name}]:</strong> ${resStr}`);
+            }
+
+            // 3. Agent Reasoning / Thoughts
+            if (p.text && p.text.trim()) {
+              appendCard('card-thought', `💭 <strong>Agent Thought:</strong> ${p.text}`);
+            }
+          });
+        }
+
+        // Fallback for actions.tool_calls if emitted separately
+        if (data.actions && data.actions.tool_calls) {
+          data.actions.tool_calls.forEach(tc => {
+            const argsStr = Object.entries(tc.args || {})
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(', ');
+            appendCard('card-tool', `🛠️ <strong>Action:</strong> <code>${tc.name}(${argsStr})</code>`);
+          });
+        }
+      } else if (event.type === 'nav_progress') {
+        updateNavProgress(event.data);
+      } else if (event.type === 'telemetry') {
+        updateTelemetry(event.data);
+      } else if (event.type === 'queue_state') {
+        updateQueueDisplay(event.data);
+      } else if (event.type === 'server_shutdown') {
+        setServerOffline("The backend was stopped by user (Ctrl+C).");
+      }
+    }
+
+    function toggleAuditDrawer() {
+      const el = document.getElementById('auditContainer');
+      el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+    }
+
+    function updateQueueDisplay(q) {
+      if (!q) return;
+
+      // Update badge count
+      const countBadge = document.getElementById('queueCountBadge');
+      const count = (q.queued_events || []).length;
+      countBadge.textContent = `${count} Queued`;
+      countBadge.style.backgroundColor = count > 0 ? '#1f6feb' : '#30363d';
+
+      // Update active task banner
+      const activeBox = document.getElementById('activeTaskBox');
+      const activePBadge = document.getElementById('activePBadge');
+      const activeSource = document.getElementById('activeSource');
+      const activePrompt = document.getElementById('activePrompt');
+
+      if (q.active_task) {
+        activeBox.style.display = 'flex';
+        const p = q.active_task.priority;
+        activePBadge.className = `p-badge p${p}`;
+        activePBadge.textContent = `P${p}`;
+        activeSource.textContent = `${q.active_task.source} • ${q.active_task.event_type}`;
+        activePrompt.textContent = q.active_task.prompt;
+      } else {
+        activeBox.style.display = 'none';
+      }
+
+      // Update queued items list
+      const listEl = document.getElementById('queueList');
+      if (!q.queued_events || q.queued_events.length === 0) {
+        listEl.innerHTML = `<div style="color:var(--text-dim); font-size:0.75rem; text-align:center; padding:4px;">(Queue is empty — Robot idle)</div>`;
+      } else {
+        listEl.innerHTML = q.queued_events.map((item, idx) => `
+          <div class="queue-item">
+            <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+              <span style="color:var(--text-muted); font-size:0.72rem;">#${idx + 1}</span>
+              <span class="p-badge p${item.priority}">P${item.priority}</span>
+              <span style="font-weight:600; font-size:0.74rem;">${item.event_type}</span>
+              <span style="color:var(--text-muted); font-size:0.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">
+                ${item.prompt.replace(/\[SYSTEM [^\]]+\]/, '').trim()}
+              </span>
+            </div>
+            <span style="color:var(--text-dim); font-size:0.7rem;">${item.source}</span>
+          </div>
+        `).join('');
+      }
+
+      // Update recent event audit drawer
+      const auditRows = document.getElementById('auditRows');
+      if (auditRows && q.recent_audit) {
+        auditRows.innerHTML = q.recent_audit.map(a => {
+          const t = new Date(a.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const statusClass = `audit-status-${a.status}`;
+          return `
+            <div class="audit-row">
+              <span>[${t}] <strong>${a.event_type}</strong> (P${a.priority})</span>
+              <span class="${statusClass}">[${a.status.toUpperCase()}] ${a.detail || ''}</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Arena Map Interactivity & Odometry Trail State
+    const LANDMARK_COORDS = {
+      charging_dock: [0.0, 0.0],
+      front_door: [1.2, 0.0],
+      living_room: [0.6, 0.5],
+      kitchen: [0.8, -0.6]
+    };
+    let odometryPoints = [];
+    const MAX_TRAIL_POINTS = 120;
+
+    function setMapSize(heightPx) {
+      const wrapper = document.getElementById('mapWrapper');
+      wrapper.style.height = `${heightPx}px`;
+      document.getElementById('btnSizeS').classList.toggle('active', heightPx <= 220);
+      document.getElementById('btnSizeM').classList.toggle('active', heightPx > 220 && heightPx <= 360);
+      document.getElementById('btnSizeL').classList.toggle('active', heightPx > 360);
+    }
+
+    function clearOdometryTrail() {
+      odometryPoints = [];
+      const trail = document.getElementById('odometryTrail');
+      if (trail) trail.setAttribute('points', '');
+    }
+
+    function handleLandmarkClick(landmarkKey, label) {
+      if (confirm(`Send robot to ${label} (${landmarkKey})?`)) {
+        appendCard('card-prompt', `📍 <strong>Map Interaction:</strong> User dispatched robot to <strong>${label}</strong>.`);
+        postStimulus('user_message', 'user_dashboard', {
+          message: `Please navigate to the ${label.toLowerCase()} landmark.`
+        });
+      }
+    }
+
+    // Responsive Arena ViewBox Engine (Edge-to-Edge Fluid Aspect Ratio)
+    let currentMapBounds = { minX: -0.6, minY: -1.0, spanX: 2.4, spanY: 2.0 };
+
+    function renderDynamicGrid(minX, minY, spanX, spanY) {
+      const gridLayer = document.getElementById('mapGridLayer');
+      if (!gridLayer) return;
+
+      const maxX = minX + spanX;
+      const maxY = minY + spanY;
+      let svgHtml = '';
+
+      // Grid lines every 0.5 meters
+      const startX = Math.floor(minX * 2) / 2;
+      const endX = Math.ceil(maxX * 2) / 2;
+      const startY = Math.floor(minY * 2) / 2;
+      const endY = Math.ceil(maxY * 2) / 2;
+
+      // Vertical grid lines
+      for (let x = startX; x <= endX; x += 0.5) {
+        const isAxis = Math.abs(x) < 0.01;
+        svgHtml += `<line x1="${x}" y1="${minY}" x2="${x}" y2="${maxY}" stroke="${isAxis ? '#30363d' : '#1c2128'}" stroke-width="${isAxis ? '0.012' : '0.006'}"/>`;
+        if (isAxis) {
+          svgHtml += `<text x="${x + 0.02}" y="${maxY - 0.06}" fill="#484f58" font-size="0.045" font-family="monospace">X=0</text>`;
+        } else if (Math.abs(x % 1.0) < 0.01) {
+          svgHtml += `<text x="${x + 0.02}" y="${maxY - 0.06}" fill="#30363d" font-size="0.04" font-family="monospace">${x > 0 ? '+' : ''}${x.toFixed(1)}m</text>`;
+        }
+      }
+
+      // Horizontal grid lines
+      for (let y = startY; y <= endY; y += 0.5) {
+        const isAxis = Math.abs(y) < 0.01;
+        svgHtml += `<line x1="${minX}" y1="${y}" x2="${maxX}" y2="${y}" stroke="${isAxis ? '#30363d' : '#1c2128'}" stroke-width="${isAxis ? '0.012' : '0.006'}"/>`;
+        if (isAxis) {
+          svgHtml += `<text x="${minX + 0.04}" y="${y - 0.02}" fill="#484f58" font-size="0.045" font-family="monospace">Y=0</text>`;
+        } else if (Math.abs(y % 1.0) < 0.01) {
+          // SVG Y is inverted: negative SVG Y is positive robot Y
+          const robotY = -y;
+          svgHtml += `<text x="${minX + 0.04}" y="${y - 0.02}" fill="#30363d" font-size="0.04" font-family="monospace">${robotY > 0 ? '+' : ''}${robotY.toFixed(1)}m</text>`;
+        }
+      }
+
+      gridLayer.innerHTML = svgHtml;
+    }
+
+    function updateArenaViewBox() {
+      const wrapper = document.getElementById('mapWrapper');
+      const svg = document.getElementById('arenaSvg');
+      if (!wrapper || !svg) return;
+
+      const w = wrapper.clientWidth || 600;
+      const h = wrapper.clientHeight || 340;
+      const aspect = w / h;
+
+      // Arena bounds to comfortably enclose all landmarks:
+      // Dock (0,0), Front Door (1.2, 0), Living Room (0.6, -0.5), Kitchen (0.8, +0.6)
+      // Center of landmarks is ~ (0.6, 0.0)
+      const centerX = 0.6;
+      const centerY = 0.0;
+      const minSpanY = 1.8; // At least 1.8m vertical height to fit living room & kitchen
+
+      let spanY = minSpanY;
+      let spanX = spanY * aspect;
+
+      // Ensure spanX is at least 2.2m to fit Dock & Front Door with padding
+      if (spanX < 2.2) {
+        spanX = 2.2;
+        spanY = spanX / aspect;
+      }
+
+      const minX = centerX - spanX / 2;
+      const minY = centerY - spanY / 2;
+
+      currentMapBounds = { minX, minY, spanX, spanY };
+      svg.setAttribute('viewBox', `${minX.toFixed(3)} ${minY.toFixed(3)} ${spanX.toFixed(3)} ${spanY.toFixed(3)}`);
+      renderDynamicGrid(minX, minY, spanX, spanY);
+    }
+
+    // Attach ResizeObserver to auto-update whenever wrapper dimensions change
+    const resizeObserver = new ResizeObserver(() => {
+      updateArenaViewBox();
+    });
+    const mapWrapperEl = document.getElementById('mapWrapper');
+    if (mapWrapperEl) {
+      resizeObserver.observe(mapWrapperEl);
+    }
+    window.addEventListener('resize', updateArenaViewBox);
+
+    // Track cursor coordinates across SVG in meters
+    const arenaSvg = document.getElementById('arenaSvg');
+    if (arenaSvg) {
+      arenaSvg.addEventListener('mousemove', function(e) {
+        const pt = arenaSvg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const ctm = arenaSvg.getScreenCTM();
+        if (ctm) {
+          const svgP = pt.matrixTransform(ctm.inverse());
+          // SVG coordinate: X is east, SVG Y is south (-Y in robot frame)
+          const robotX = svgP.x.toFixed(2);
+          const robotY = (-svgP.y).toFixed(2);
+          const readout = document.getElementById('mapCoords');
+          if (readout) {
+            readout.textContent = `X: ${robotX}m, Y: ${robotY}m`;
+          }
+        }
+      });
+    }
+
+    function updateTelemetry(t) {
+      if (!t || !t.pos) return;
+      document.getElementById('telemPos').textContent = `${t.pos[0].toFixed(2)}, ${t.pos[1].toFixed(2)} m`;
+      document.getElementById('telemYaw').textContent = `${t.yaw.toFixed(1)}°`;
+      document.getElementById('telemGoal').textContent = t.nav_target || 'None';
+      document.getElementById('telemMotion').textContent = t.motion_suppressed ? 'Suppressed' : 'Active';
+
+      // SVG coordinates: MuJoCo Y is SVG -Y
+      const rX = t.pos[0];
+      const rY = -t.pos[1];
+
+      // Update Arena Map Pin
+      const marker = document.getElementById('robotMarker');
+      if (marker) {
+        marker.setAttribute('transform', `translate(${rX}, ${rY}) rotate(${-t.yaw})`);
+      }
+
+      // Update Odometry Breadcrumb Trail
+      if (odometryPoints.length === 0 || 
+          Math.hypot(odometryPoints[odometryPoints.length-1][0] - rX, odometryPoints[odometryPoints.length-1][1] - rY) > 0.04) {
+        odometryPoints.push([rX, rY]);
+        if (odometryPoints.length > MAX_TRAIL_POINTS) {
+          odometryPoints.shift();
+        }
+        const trailEl = document.getElementById('odometryTrail');
+        if (trailEl) {
+          trailEl.setAttribute('points', odometryPoints.map(p => `${p[0].toFixed(3)},${p[1].toFixed(3)}`).join(' '));
+        }
+      }
+
+      // Update Nav Target Line
+      const targetLine = document.getElementById('navTargetLine');
+      if (targetLine) {
+        if (t.nav_target && LANDMARK_COORDS[t.nav_target]) {
+          const [tgX, tgY] = LANDMARK_COORDS[t.nav_target];
+          targetLine.setAttribute('x1', rX);
+          targetLine.setAttribute('y1', rY);
+          targetLine.setAttribute('x2', tgX);
+          targetLine.setAttribute('y2', -tgY);
+          targetLine.setAttribute('opacity', '0.7');
+        } else {
+          targetLine.setAttribute('opacity', '0');
+        }
+      }
+    }
+
+    function appendCard(className, innerHTML) {
+      const feed = document.getElementById('feedContainer');
+      const card = document.createElement('div');
+      card.className = `feed-card ${className}`;
+      card.innerHTML = `
+        <div class="feed-card-content">${innerHTML}</div>
+        <div class="feed-expand-btn">▾ click to expand</div>
+      `;
+      feed.appendChild(card);
+
+      // Check if content exceeds 2 lines
+      const contentEl = card.querySelector('.feed-card-content');
+      const expandBtn = card.querySelector('.feed-expand-btn');
+
+      // Allow DOM to compute layout
+      requestAnimationFrame(() => {
+        if (contentEl.scrollHeight > contentEl.clientHeight + 4) {
+          card.classList.add('is-collapsible');
+          card.onclick = function() {
+            const isExp = card.classList.toggle('expanded');
+            expandBtn.textContent = isExp ? '▴ click to collapse' : '▾ click to expand';
+          };
+        }
+      });
+
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function updateNavProgress(data) {
+      const card = document.getElementById('navProgressCard');
+      const fill = document.getElementById('navProgressBar');
+      const text = document.getElementById('navStatusText');
+      const eta = document.getElementById('navEtaText');
+
+      card.classList.add('active');
+      fill.style.width = `${data.progress_pct}%`;
+      text.textContent = `Navigating to ${data.landmark} (${data.progress_pct}%)`;
+      eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
+
+      if (data.progress_pct >= 99) {
+        setTimeout(() => card.classList.remove('active'), 2000);
+      }
+    }
+
+    // API Post Helpers
+    async function postStimulus(eventType, source, payload) {
+      await fetch('/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: source, event_type: eventType, payload: payload })
+      });
+    }
+
+    function triggerDoorbell() {
+      const name = document.getElementById('visitorNameInput').value.trim();
+      postStimulus('doorbell_press', 'nest_doorbell', { person_name: name });
+    }
+
+    function sendToDock() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Please return to your charging dock.' });
+    }
+
+    function triggerEmergencyStop() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Stop immediately! Halt all movement!' });
+    }
+
+    function triggerHandshake() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Please perform a friendly handshake greeting.' });
+    }
+
+    function triggerMotion() {
+      postStimulus('motion_detected', 'motion_sensor', { difference: 18.5 });
+    }
+
+    function sendUserMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+      postStimulus('user_message', 'user_dashboard', { message: msg });
+      input.value = '';
+    }
+  </script>
+</body>
+</html>

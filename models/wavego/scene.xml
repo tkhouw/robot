@@ -20,5 +20,7 @@
   <worldbody>
     <light pos="0 0 1.0" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.02" type="plane" material="groundplane"/>
+    <!-- 3rd-person isometric tracking camera for web visualizer -->
+    <camera name="tracking_cam" pos="-0.7 -0.7 0.5" xyaxes="0.707 -0.707 0 0.408 0.408 0.816"/>
   </worldbody>
 </mujoco>
