@@ -5,8 +5,10 @@ and voice/text commands, streaming agent reasoning via Server-Sent Events (SSE).
 """
 
 import asyncio
+import functools
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +20,9 @@ from app.config import config
 from app.tools import get_robot, get_nav_manager
 
 app = FastAPI(title="WAVEGO Pro Cognitive Agent Gateway")
+
+# Dedicated single-thread executor for OpenGL/GLX rendering to avoid X11 BadAccess multi-thread conflicts
+render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="MuJoCoRenderer")
 
 # Enable CORS for phone/laptop web controllers
 app.add_middleware(
@@ -318,14 +323,20 @@ async def video_stream(request: Request, cam: str = "tracking_cam"):
     Uses asyncio.to_thread to keep the event loop responsive to Ctrl+C (SIGINT).
     """
     async def frame_generator():
+        loop = asyncio.get_running_loop()
         try:
             while not await request.is_disconnected():
                 robot = get_robot()
                 if hasattr(robot, "get_jpeg_frame"):
-                    # Offload OpenGL rendering to worker thread to prevent event loop blocking
-                    frame_bytes = await asyncio.to_thread(
-                        robot.get_jpeg_frame, camera_name=cam, width=480, height=360, quality=75
+                    # Offload OpenGL rendering to dedicated single-worker thread to eliminate X11 BadAccess
+                    render_call = functools.partial(
+                        robot.get_jpeg_frame,
+                        camera_name=cam,
+                        width=480,
+                        height=360,
+                        quality=75,
                     )
+                    frame_bytes = await loop.run_in_executor(render_executor, render_call)
                     yield (
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
