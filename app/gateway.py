@@ -171,22 +171,42 @@ async def event_processor_loop():
         await broadcast_queue_state()
 
         try:
-            async for adk_event in runtime.execute_prompt(prompt_text):
-                # Serialize the native Google ADK Event into a structured dictionary
-                event_dict = adk_event.model_dump(mode="json", exclude_none=True)
+            # Enforce an overall 15s timeout per stimulus turn, plus a safety step cap
+            step_count = 0
+            MAX_STEPS_PER_TURN = 4
 
-                # Extract human-readable summary for console logging
-                if adk_event.actions and getattr(adk_event.actions, "tool_calls", None):
-                    for tc in adk_event.actions.tool_calls:
-                        print(f"[ADK TOOL CALL]: {tc.name}({tc.args})")
+            async with asyncio.timeout(15.0):
+                async for adk_event in runtime.execute_prompt(prompt_text):
+                    step_count += 1
+                    # Serialize the native Google ADK Event into a structured dictionary
+                    event_dict = adk_event.model_dump(mode="json", exclude_none=True)
 
-                if adk_event.content and getattr(adk_event.content, "parts", None):
-                    for part in adk_event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            print(f"[ADK AGENT THOUGHT/RESPONSE]: {part.text}")
+                    has_tool_call = False
+                    # Extract human-readable summary for console logging
+                    if adk_event.actions and getattr(adk_event.actions, "tool_calls", None):
+                        has_tool_call = True
+                        for tc in adk_event.actions.tool_calls:
+                            print(f"[ADK TOOL CALL]: {tc.name}({tc.args})")
 
-                await broadcast_sse("agent_adk_event", event_dict)
+                    if adk_event.content and getattr(adk_event.content, "parts", None):
+                        for part in adk_event.content.parts:
+                            if hasattr(part, "text") and part.text:
+                                print(f"[ADK AGENT THOUGHT/RESPONSE]: {part.text}")
 
+                    await broadcast_sse("agent_adk_event", event_dict)
+
+                    # Break if the agent emitted its final terminal response
+                    if hasattr(adk_event, "is_final_response") and adk_event.is_final_response():
+                        break
+
+                    # If the agent executed a tool and provided its thought, or reached safety step cap
+                    if step_count >= MAX_STEPS_PER_TURN:
+                        print(f"[AGENT TURN GUARD] Concluded turn after {step_count} steps to allow next queued event to process.")
+                        break
+
+        except TimeoutError:
+            print(f"[AGENT TIMEOUT] Turn exceeded 15s timeout limit; concluding turn and releasing queue.")
+            await broadcast_sse("agent_error", {"error": "Turn timed out after 15s; proceeding to next event."})
         except Exception as e:
             print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})

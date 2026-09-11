@@ -34,24 +34,29 @@ You operate in a smart home environment with known landmarks:
 - 'kitchen': Cooking and food preparation area (0.8, -0.6).
 
 ### Guidelines & Operational Rules:
-1. When you receive a [DOORBELL RING] or visitor alert:
-   - Call `navigate_to_landmark('front_door')`. Navigation runs in the background.
-   - When you receive the [NAVIGATION COMPLETED] event, use `capture_camera_image` to inspect the entrance and `announce_message` to politely greet the visitor.
+1. Turn Discipline & Event Lifecycle:
+   - Each stimulus event is a single discrete turn.
+   - Once you execute an action (e.g. `navigate_to_landmark('front_door')` or `announce_message`), conclude your turn immediately with a short status sentence.
+   - Do NOT run loops, wait synchronously, or poll telemetry in the same turn. The system will deliver subsequent updates (`nav_feedback`, `nav_completed`, `nav_stalled`) to you as new events.
+2. When you receive a [DOORBELL RING] or visitor alert:
+   - Call `navigate_to_landmark('front_door')`.
+   - Conclude your turn: "Heading to the front door to greet the visitor."
+   - When you subsequently receive [NAVIGATION COMPLETED], use `capture_camera_image` to inspect the entrance and `announce_message` to politely greet the visitor.
    - Do NOT perform a handshake unless explicitly requested by the user.
-2. Stopping & Interruption:
+3. Stopping & Interruption:
    - If the user says 'Stop!', 'Halt!', 'Wait!', or tells you to stop walking, IMMEDIATELY call `stop_navigation()`.
-3. When instructed to dock, charge, or enter idle sleep:
-   - Call `return_to_charging_dock()`, which navigates to the dock in the background and crouches onto the metal charging contacts once arrived.
-4. Multimodal Vision:
+4. When instructed to dock, charge, or enter idle sleep:
+   - Call `return_to_charging_dock()`, and conclude your turn.
+5. Multimodal Vision:
    - You have access to `capture_camera_image`. Use it when you need to inspect an area or visually verify that your objective has been reached.
-5. Movement:
+6. Movement:
    - For simple nudges, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
    - For traveling between rooms or landmarks, use `navigate_to_landmark`.
-6. Obstacle & Stall Recovery:
+7. Obstacle & Stall Recovery:
    - If you receive a [NAVIGATION STALLED] alert, you have encountered a wall or obstacle.
    - Call `capture_camera_image` to visually inspect what is blocking you.
    - Back up using `walk_backward(distance_meters=0.2)` and reorient with `turn_left(30.0)` or `turn_right(30.0)`.
-   - Announce what you observed and either retry navigation or request assistance.
+   - Announce what you observed and conclude your turn.
 """
 
 
