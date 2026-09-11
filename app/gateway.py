@@ -10,10 +10,12 @@ import time
 from typing import Any, Dict, List
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
 from app.agent import QuadrupedCognitiveRuntime
+from app.config import config
+from app.tools import get_robot, get_nav_manager
 
 app = FastAPI(title="WAVEGO Pro Cognitive Agent Gateway")
 
@@ -134,11 +136,39 @@ async def event_processor_loop():
             event_queue.task_done()
 
 
+async def telemetry_broadcast_loop():
+    """Pushes real-time telemetry over the existing SSE stream (4 Hz) without polling."""
+    while True:
+        try:
+            if sse_subscribers:
+                robot = get_robot()
+                pos, _ = robot.get_pose()
+                rpy = robot.get_imu()
+                nav = get_nav_manager()
+                motion_sensor = getattr(app.state, "motion_sensor", None)
+
+                data = {
+                    "pos": [round(float(pos[0]), 3), round(float(pos[1]), 3), round(float(pos[2]), 3)],
+                    "yaw": round(float(rpy[2]), 1),
+                    "nav_target": nav.target_name if nav.is_navigating else None,
+                    "nav_distance": round(nav.remaining_distance, 2) if nav.is_navigating else 0.0,
+                    "nav_progress": nav.progress_pct if nav.is_navigating else 0.0,
+                    "nav_eta": nav.eta_seconds if nav.is_navigating else 0.0,
+                    "is_busy": is_agent_busy,
+                    "motion_suppressed": getattr(motion_sensor, "suppress_motion_detection", False) if motion_sensor else False,
+                }
+                await broadcast_sse("telemetry", data)
+        except Exception:
+            pass
+        await asyncio.sleep(0.25)
+
+
 @app.on_event("startup")
 async def startup_event():
     global runtime
     runtime = QuadrupedCognitiveRuntime()
     asyncio.create_task(event_processor_loop())
+    asyncio.create_task(telemetry_broadcast_loop())
 
 
 @app.post("/events")
@@ -267,4 +297,44 @@ async def event_stream(request: Request):
                 sse_subscribers.remove(queue)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard_index():
+    """Serves the interactive Portrait / Landscape web dashboard."""
+    import os
+    dashboard_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    if os.path.exists(dashboard_path):
+        with open(dashboard_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>WAVEGO Dashboard template not found</h1>"
+
+
+@app.get("/video/stream")
+async def video_stream(request: Request, cam: str = "tracking_cam"):
+    """
+    Streams live MJPEG video from the MuJoCo simulation.
+    cam: 'tracking_cam' (3rd-person) or 'front_camera' (robot eye).
+    Uses asyncio.to_thread to keep the event loop responsive to Ctrl+C (SIGINT).
+    """
+    async def frame_generator():
+        try:
+            while not await request.is_disconnected():
+                robot = get_robot()
+                if hasattr(robot, "get_jpeg_frame"):
+                    # Offload OpenGL rendering to worker thread to prevent event loop blocking
+                    frame_bytes = await asyncio.to_thread(
+                        robot.get_jpeg_frame, camera_name=cam, width=480, height=360, quality=75
+                    )
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                    )
+                await asyncio.sleep(0.04)  # ~25 FPS
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
+
+    return StreamingResponse(
+        frame_generator(), media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 

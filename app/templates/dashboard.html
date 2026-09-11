@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAVEGO Pro Cognitive Control Center</title>
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --card-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-dim: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #2ea043;
+      --accent-red: #da3633;
+      --accent-yellow: #d29922;
+      --accent-purple: #bc8cff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Header */
+    header {
+      background-color: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { font-size: 1.15rem; font-weight: 600; color: #f0f6fc; }
+    .status-pill {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background-color: #238636;
+      color: #fff;
+      font-weight: 600;
+    }
+    .layout-toggle-btn {
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .layout-toggle-btn:hover { background: #30363d; }
+
+    /* Main Container (Supports Portrait Stacked & Landscape Side-by-Side) */
+    .app-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    /* Side-by-Side layout */
+    .app-container.layout-side {
+      flex-direction: row;
+    }
+    /* Stacked (Portrait) layout */
+    .app-container.layout-stacked {
+      flex-direction: column;
+    }
+
+    /* Left / Top Viewport Column */
+    .viewport-pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      background-color: #090d13;
+      overflow-y: auto;
+    }
+    .layout-side .viewport-pane { width: 50%; min-width: 480px; }
+    .layout-stacked .viewport-pane { width: 100%; height: 50%; border-right: none; border-bottom: 1px solid var(--border-color); }
+
+    .video-wrapper {
+      position: relative;
+      background: #000;
+      width: 100%;
+      height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .video-wrapper img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .video-overlay-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 6px;
+    }
+    .cam-btn {
+      background: rgba(22, 27, 34, 0.85);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+    .cam-btn.active { background: var(--accent-blue); }
+
+    /* Telemetry & Mini-Map */
+    .telemetry-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 12px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .telem-card {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .telem-card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; }
+    .telem-card .val { font-size: 0.95rem; font-weight: 600; color: #f0f6fc; margin-top: 2px; }
+
+    .map-container {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .map-container h3 { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .arena-map {
+      width: 100%;
+      height: 140px;
+      background: #161b22;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+    }
+
+    /* Right / Bottom Control & Cognition Column */
+    .control-pane {
+      display: flex;
+      flex-direction: column;
+      background-color: var(--card-bg);
+      overflow: hidden;
+    }
+    .layout-side .control-pane { width: 50%; }
+    .layout-stacked .control-pane { width: 100%; height: 50%; }
+
+    /* Stimulus Buttons */
+    .stimulus-section {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #161b22;
+      flex-shrink: 0;
+    }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+    .trigger-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease-in-out;
+    }
+    .btn-doorbell { background: #1f6feb; color: #fff; }
+    .btn-doorbell:hover { background: #388bfd; }
+    .btn-dock { background: #238636; color: #fff; }
+    .btn-dock:hover { background: #2ea043; }
+    .btn-stop { background: var(--accent-red); color: #fff; font-weight: 700; }
+    .btn-stop:hover { background: #f85149; }
+    .btn-action { background: #21262d; border-color: var(--border-color); color: var(--text-main); }
+    .btn-action:hover { background: #30363d; }
+
+    .doorbell-input-box {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .doorbell-input-box input {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      width: 140px;
+    }
+
+    /* Navigation Progress Banner */
+    .nav-progress-card {
+      display: none;
+      padding: 8px 12px;
+      background: #1f2a37;
+      border-bottom: 1px solid #374151;
+      font-size: 0.85rem;
+    }
+    .nav-progress-card.active { display: block; }
+    .progress-bar-bg {
+      background: #374151;
+      border-radius: 4px;
+      height: 8px;
+      width: 100%;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      background: var(--accent-yellow);
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    /* Real-Time Cognition Stream */
+    .feed-container {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .feed-card {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      animation: fadeIn 0.2s ease-in;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .card-thought { border-left: 3px solid var(--accent-purple); color: #e6edf3; }
+    .card-tool { border-left: 3px solid var(--accent-green); background: #0c1810; }
+    .card-tool code { color: #56d364; font-weight: 600; }
+    .card-prompt { border-left: 3px solid var(--accent-blue); background: #0d1829; }
+    .card-stall { border-left: 3px solid var(--accent-red); background: #260d0d; color: #ff7b72; }
+    .card-completed { border-left: 3px solid var(--accent-yellow); background: #1f1b0d; }
+
+    /* Chat Bar */
+    .chat-section {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border-color);
+      background: #161b22;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .chat-input:focus { border-color: var(--accent-blue); }
+    .chat-send-btn {
+      background: #238636;
+      border: none;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .chat-send-btn:hover { background: #2ea043; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <h1>🤖 WAVEGO Pro Cognitive Agent</h1>
+      <span class="status-pill" id="agentStatusBadge">Agent: Idle</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="layout-toggle-btn" id="layoutToggleBtn" onclick="toggleLayout()">
+        📐 Layout: Side-by-Side
+      </button>
+    </div>
+  </header>
+
+  <!-- App Body Layout -->
+  <div class="app-container layout-side" id="appContainer">
+
+    <!-- LEFT / TOP PANE: MuJoCo Live Visualizer & Map -->
+    <div class="viewport-pane">
+      <div class="video-wrapper">
+        <img id="mjpegStream" src="/video/stream?cam=tracking_cam" alt="MuJoCo Simulation Stream">
+        <div class="video-overlay-controls">
+          <button class="cam-btn active" id="btnTrackingCam" onclick="switchCam('tracking_cam')">🌐 3rd-Person</button>
+          <button class="cam-btn" id="btnFrontCam" onclick="switchCam('front_camera')">👁️ Robot Eye</button>
+        </div>
+      </div>
+
+      <!-- Real-Time Telemetry Badges -->
+      <div class="telemetry-row">
+        <div class="telem-card">
+          <div class="label">Position (X, Y)</div>
+          <div class="val" id="telemPos">0.00, 0.00 m</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Heading (Yaw)</div>
+          <div class="val" id="telemYaw">0.0°</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Nav Target</div>
+          <div class="val" id="telemGoal">None</div>
+        </div>
+        <div class="telem-card">
+          <div class="label">Motion Guard</div>
+          <div class="val" id="telemMotion">Active</div>
+        </div>
+      </div>
+
+      <!-- 2D Landmark Arena Map -->
+      <div class="map-container">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3>Smart Home Landmark Arena</h3>
+          <span style="font-size: 0.75rem; color: var(--text-dim);">Coordinates: Meters</span>
+        </div>
+        <svg class="arena-map" id="arenaSvg" viewBox="-0.5 -1.0 2.2 2.0">
+          <!-- Grid lines -->
+          <line x1="-0.5" y1="0" x2="1.7" y2="0" stroke="#30363d" stroke-dasharray="0.05" stroke-width="0.01"/>
+          <line x1="0" y1="-1.0" x2="0" y2="1.0" stroke="#30363d" stroke-dasharray="0.05" stroke-width="0.01"/>
+
+          <!-- Landmarks -->
+          <g transform="translate(0.0, 0.0)">
+            <circle r="0.06" fill="#238636"/>
+            <text x="0.08" y="0.03" fill="#8b949e" font-size="0.07">Dock (0, 0)</text>
+          </g>
+          <g transform="translate(1.2, 0.0)">
+            <circle r="0.06" fill="#1f6feb"/>
+            <text x="1.05" y="-0.07" fill="#8b949e" font-size="0.07">Front Door (1.2, 0)</text>
+          </g>
+          <g transform="translate(0.6, 0.5)">
+            <circle r="0.06" fill="#bc8cff"/>
+            <text x="0.68" y="0.53" fill="#8b949e" font-size="0.07">Living Room</text>
+          </g>
+          <g transform="translate(0.8, -0.6)">
+            <circle r="0.06" fill="#d29922"/>
+            <text x="0.88" y="-0.57" fill="#8b949e" font-size="0.07">Kitchen</text>
+          </g>
+
+          <!-- Robot Pin -->
+          <g id="robotMarker" transform="translate(0.0, 0.0)">
+            <polygon points="-0.04,-0.04 0.06,0 -0.04,0.04" fill="#f85149"/>
+            <circle r="0.02" fill="#fff"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT / BOTTOM PANE: Stimulus Station & ADK Cognition -->
+    <div class="control-pane">
+
+      <!-- Stimulus Station -->
+      <div class="stimulus-section">
+        <div class="section-title">Trigger Robot Stimulus Events</div>
+        <div class="trigger-buttons">
+          <div class="doorbell-input-box">
+            <input type="text" id="visitorNameInput" placeholder="Visitor Name (Alice)" value="Alice">
+            <button class="btn btn-doorbell" onclick="triggerDoorbell()">🔔 Ring Doorbell</button>
+          </div>
+          <button class="btn btn-dock" onclick="sendToDock()">⚡ Send to Dock</button>
+          <button class="btn btn-stop" onclick="triggerEmergencyStop()">🛑 STOP</button>
+          <button class="btn btn-action" onclick="triggerHandshake()">🐾 Handshake</button>
+          <button class="btn btn-action" onclick="triggerMotion()">👁️ Motion Alert</button>
+        </div>
+      </div>
+
+      <!-- Navigation Live Progress Widget -->
+      <div class="nav-progress-card" id="navProgressCard">
+        <div style="display: flex; justify-content: space-between;">
+          <strong id="navStatusText">Navigating to Front Door...</strong>
+          <span id="navEtaText">ETA: 4.2s (0.5m)</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="navProgressBar"></div>
+        </div>
+      </div>
+
+      <!-- Real-Time ADK Cognition Feed -->
+      <div class="feed-container" id="feedContainer">
+        <div class="feed-card card-prompt">
+          <strong>System Ready:</strong> Event Gateway active on port 8000. Send a stimulus event or message below to start reasoning.
+        </div>
+      </div>
+
+      <!-- User Chat Input -->
+      <form class="chat-section" onsubmit="sendUserMessage(event)">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Say something or give an instruction... (e.g. 'Walk forward and check front door')">
+        <button type="submit" class="chat-send-btn">Send</button>
+      </form>
+    </div>
+
+  </div>
+
+  <script>
+    let currentCam = 'tracking_cam';
+    let isStacked = false;
+
+    // Detect saved layout or vertical monitor
+    if (localStorage.getItem('layout') === 'stacked' || window.innerHeight > window.innerWidth) {
+      setStackedLayout(true);
+    }
+
+    function toggleLayout() {
+      setStackedLayout(!isStacked);
+    }
+
+    function setStackedLayout(stacked) {
+      isStacked = stacked;
+      const container = document.getElementById('appContainer');
+      const btn = document.getElementById('layoutToggleBtn');
+      if (isStacked) {
+        container.className = 'app-container layout-stacked';
+        btn.textContent = '📐 Layout: Stacked (Portrait)';
+        localStorage.setItem('layout', 'stacked');
+      } else {
+        container.className = 'app-container layout-side';
+        btn.textContent = '📐 Layout: Side-by-Side';
+        localStorage.setItem('layout', 'side');
+      }
+    }
+
+    function switchCam(camName) {
+      currentCam = camName;
+      document.getElementById('mjpegStream').src = `/video/stream?cam=${camName}&t=${Date.now()}`;
+      document.getElementById('btnTrackingCam').classList.toggle('active', camName === 'tracking_cam');
+      document.getElementById('btnFrontCam').classList.toggle('active', camName === 'front_camera');
+    }
+
+    // Connect to SSE stream
+    const evtSource = new EventSource("/events/stream");
+    evtSource.onmessage = function(e) {
+      try {
+        const payload = JSON.parse(e.data);
+        handleStreamEvent(payload);
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    };
+
+    function handleStreamEvent(event) {
+      const feed = document.getElementById('feedContainer');
+      const badge = document.getElementById('agentStatusBadge');
+
+      if (event.type === 'agent_turn_start') {
+        badge.textContent = 'Agent: Reasoning...';
+        badge.style.backgroundColor = '#d29922';
+        appendCard('card-prompt', `<strong>Stimulus Triggered:</strong> ${event.data.prompt}`);
+      } else if (event.type === 'agent_turn_complete') {
+        badge.textContent = 'Agent: Idle';
+        badge.style.backgroundColor = '#238636';
+      } else if (event.type === 'agent_adk_event') {
+        const data = event.data;
+        // Tool Calls
+        if (data.actions && data.actions.tool_calls) {
+          data.actions.tool_calls.forEach(tc => {
+            appendCard('card-tool', `🛠️ <strong>Tool Call:</strong> <code>${tc.name}(${JSON.stringify(tc.args)})</code>`);
+          });
+        }
+        // Thought / Response text
+        if (data.content && data.content.parts) {
+          data.content.parts.forEach(p => {
+            if (p.text) {
+              appendCard('card-thought', `💬 <strong>Agent:</strong> ${p.text}`);
+            }
+          });
+        }
+      } else if (event.type === 'nav_progress') {
+        updateNavProgress(event.data);
+      } else if (event.type === 'telemetry') {
+        updateTelemetry(event.data);
+      }
+    }
+
+    function updateTelemetry(t) {
+      if (!t || !t.pos) return;
+      document.getElementById('telemPos').textContent = `${t.pos[0].toFixed(2)}, ${t.pos[1].toFixed(2)} m`;
+      document.getElementById('telemYaw').textContent = `${t.yaw.toFixed(1)}°`;
+      document.getElementById('telemGoal').textContent = t.nav_target || 'None';
+      document.getElementById('telemMotion').textContent = t.motion_suppressed ? 'Suppressed' : 'Active';
+
+      // Update Arena Map Pin
+      const marker = document.getElementById('robotMarker');
+      if (marker) {
+        // SVG coordinate transform (Y inverted in SVG)
+        marker.setAttribute('transform', `translate(${t.pos[0]}, ${-t.pos[1]}) rotate(${-t.yaw})`);
+      }
+    }
+
+    function appendCard(className, innerHTML) {
+      const feed = document.getElementById('feedContainer');
+      const card = document.createElement('div');
+      card.className = `feed-card ${className}`;
+      card.innerHTML = innerHTML;
+      feed.appendChild(card);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function updateNavProgress(data) {
+      const card = document.getElementById('navProgressCard');
+      const fill = document.getElementById('navProgressBar');
+      const text = document.getElementById('navStatusText');
+      const eta = document.getElementById('navEtaText');
+
+      card.classList.add('active');
+      fill.style.width = `${data.progress_pct}%`;
+      text.textContent = `Navigating to ${data.landmark} (${data.progress_pct}%)`;
+      eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
+
+      if (data.progress_pct >= 99) {
+        setTimeout(() => card.classList.remove('active'), 2000);
+      }
+    }
+
+    // API Post Helpers
+    async function postStimulus(eventType, source, payload) {
+      await fetch('/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: source, event_type: eventType, payload: payload })
+      });
+    }
+
+    function triggerDoorbell() {
+      const name = document.getElementById('visitorNameInput').value.trim();
+      postStimulus('doorbell_press', 'nest_doorbell', { person_name: name });
+    }
+
+    function sendToDock() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Please return to your charging dock.' });
+    }
+
+    function triggerEmergencyStop() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Stop immediately! Halt all movement!' });
+    }
+
+    function triggerHandshake() {
+      postStimulus('user_message', 'user_dashboard', { message: 'Please perform a friendly handshake greeting.' });
+    }
+
+    function triggerMotion() {
+      postStimulus('motion_detected', 'motion_sensor', { difference: 18.5 });
+    }
+
+    function sendUserMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+      postStimulus('user_message', 'user_dashboard', { message: msg });
+      input.value = '';
+    }
+  </script>
+</body>
+</html>

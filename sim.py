@@ -6,7 +6,8 @@ with the official Waveshare BodyCtrl kinematics and JSON command interface.
 
 import math
 import time
-from typing import Dict, Any, Tuple, Union
+import threading
+from typing import Dict, Any, Tuple, Union, List
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -74,6 +75,10 @@ class WavegoSim(BaseRobot):
         # Motion queue for sequential gestures (e.g. handshake)
         self.motion_queue: List[List[float]] = []
 
+        # Thread safety lock & persistent renderer cache to prevent GLFW context recreation crashes
+        self._lock = threading.Lock()
+        self._renderers: Dict[tuple, mujoco.Renderer] = {}
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -125,12 +130,20 @@ class WavegoSim(BaseRobot):
         self.filtered_ctrl += alpha * (target_rad - self.filtered_ctrl)
         self.data.ctrl[:] = self.filtered_ctrl
 
+    def _get_renderer(self, width: int, height: int) -> mujoco.Renderer:
+        """Retrieves or creates a cached persistent Renderer instance for the given resolution."""
+        key = (width, height)
+        if key not in self._renderers:
+            self._renderers[key] = mujoco.Renderer(self.model, height=height, width=width)
+        return self._renderers[key]
+
     def step(self, dt: float = None):
         """Advances physics and kinematics by one timestep."""
         if dt is None:
             dt = self.model.opt.timestep
-        self.update_gait(dt)
-        mujoco.mj_step(self.model, self.data)
+        with self._lock:
+            self.update_gait(dt)
+            mujoco.mj_step(self.model, self.data)
 
     def send_cmd(self, cmd: Union[Dict[str, Any], str]):
         """
@@ -251,25 +264,43 @@ class WavegoSim(BaseRobot):
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
-    def get_camera_image(self, width: int = 320, height: int = 240) -> bytes:
+    def get_camera_image(
+        self, width: int = 320, height: int = 240, camera_name: str = "front_camera"
+    ) -> bytes:
         """
-        Renders an RGB image from the front-facing eye-level camera
+        Renders an RGB image from the specified camera ('front_camera' or 'tracking_cam')
         and returns PNG encoded bytes.
         """
         import io
         from PIL import Image
 
-        if not hasattr(self, "_renderer") or self._renderer is None:
-            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
-        elif self._renderer.height != height or self._renderer.width != width:
-            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
-
-        self._renderer.update_scene(self.data, camera="front_camera")
-        rgb_array = self._renderer.render()
+        with self._lock:
+            renderer = self._get_renderer(width, height)
+            renderer.update_scene(self.data, camera=camera_name)
+            rgb_array = renderer.render()
 
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    def get_jpeg_frame(
+        self, camera_name: str = "tracking_cam", width: int = 480, height: int = 360, quality: int = 75
+    ) -> bytes:
+        """
+        Fast JPEG rendering for live web streaming over MJPEG.
+        """
+        import io
+        from PIL import Image
+
+        with self._lock:
+            renderer = self._get_renderer(width, height)
+            renderer.update_scene(self.data, camera=camera_name)
+            rgb_array = renderer.render()
+
+        img = Image.fromarray(rgb_array)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
         return buf.getvalue()
 
     def launch_viewer(self, target_fps: int = 30, key_callback=None):
