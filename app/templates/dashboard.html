@@ -347,6 +347,41 @@
       padding: 8px 12px;
       font-size: 0.85rem;
       animation: fadeIn 0.2s ease-in;
+      position: relative;
+      transition: background 0.15s ease;
+    }
+    .feed-card.is-collapsible {
+      cursor: pointer;
+    }
+    .feed-card.is-collapsible:hover {
+      background: #161b22;
+    }
+    .feed-card-content {
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+    .feed-card.expanded .feed-card-content {
+      -webkit-line-clamp: unset;
+      display: block;
+      overflow: visible;
+    }
+    .feed-expand-btn {
+      display: none;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+      user-select: none;
+    }
+    .feed-card.is-collapsible .feed-expand-btn {
+      display: inline-block;
+    }
+    .feed-card.is-collapsible:hover .feed-expand-btn {
+      color: #58a6ff;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
     .card-thought { border-left: 3px solid var(--accent-purple); color: #e6edf3; }
@@ -1125,8 +1160,27 @@
       const feed = document.getElementById('feedContainer');
       const card = document.createElement('div');
       card.className = `feed-card ${className}`;
-      card.innerHTML = innerHTML;
+      card.innerHTML = `
+        <div class="feed-card-content">${innerHTML}</div>
+        <div class="feed-expand-btn">▾ click to expand</div>
+      `;
       feed.appendChild(card);
+
+      // Check if content exceeds 2 lines
+      const contentEl = card.querySelector('.feed-card-content');
+      const expandBtn = card.querySelector('.feed-expand-btn');
+
+      // Allow DOM to compute layout
+      requestAnimationFrame(() => {
+        if (contentEl.scrollHeight > contentEl.clientHeight + 4) {
+          card.classList.add('is-collapsible');
+          card.onclick = function() {
+            const isExp = card.classList.toggle('expanded');
+            expandBtn.textContent = isExp ? '▴ click to collapse' : '▾ click to expand';
+          };
+        }
+      });
+
       feed.scrollTop = feed.scrollHeight;
     }
 
