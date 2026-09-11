@@ -178,15 +178,16 @@ async def event_processor_loop():
             async with asyncio.timeout(15.0):
                 async for adk_event in runtime.execute_prompt(prompt_text):
                     step_count += 1
-                    # Serialize the native Google ADK Event into a structured dictionary
                     event_dict = adk_event.model_dump(mode="json", exclude_none=True)
 
-                    has_tool_call = False
-                    # Extract human-readable summary for console logging
-                    if adk_event.actions and getattr(adk_event.actions, "tool_calls", None):
-                        has_tool_call = True
-                        for tc in adk_event.actions.tool_calls:
-                            print(f"[ADK TOOL CALL]: {tc.name}({tc.args})")
+                    # Extract tool calls and responses via ADK methods
+                    if hasattr(adk_event, "get_function_calls"):
+                        for fc in adk_event.get_function_calls():
+                            print(f"[ADK TOOL CALL]: {fc.name}({fc.args})")
+
+                    if hasattr(adk_event, "get_function_responses"):
+                        for fr in adk_event.get_function_responses():
+                            print(f"[ADK TOOL RESULT]: {fr.name} -> {fr.response}")
 
                     if adk_event.content and getattr(adk_event.content, "parts", None):
                         for part in adk_event.content.parts:

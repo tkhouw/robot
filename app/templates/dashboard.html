@@ -352,6 +352,8 @@
     .card-thought { border-left: 3px solid var(--accent-purple); color: #e6edf3; }
     .card-tool { border-left: 3px solid var(--accent-green); background: #0c1810; }
     .card-tool code { color: #56d364; font-weight: 600; }
+    .card-tool-result { border-left: 3px solid #388bfd; background: #0c1626; color: #79c0ff; font-family: monospace; font-size: 0.8rem; }
+    .card-announce { border-left: 3px solid #d29922; background: #261c0c; color: #f0e6d2; }
     .card-prompt { border-left: 3px solid var(--accent-blue); background: #0d1829; }
     .card-stall { border-left: 3px solid var(--accent-red); background: #260d0d; color: #ff7b72; }
     .card-alert { border-left: 3px solid var(--accent-red); background: #2b1111; color: #ff7b72; font-weight: 600; }
@@ -813,18 +815,45 @@
         badge.style.backgroundColor = '#238636';
       } else if (event.type === 'agent_adk_event') {
         const data = event.data;
-        // Tool Calls
-        if (data.actions && data.actions.tool_calls) {
-          data.actions.tool_calls.forEach(tc => {
-            appendCard('card-tool', `🛠️ <strong>Tool Call:</strong> <code>${tc.name}(${JSON.stringify(tc.args)})</code>`);
-          });
-        }
-        // Thought / Response text
+
+        // 1. Tool / Function Calls (via content.parts.function_call or actions.tool_calls)
         if (data.content && data.content.parts) {
           data.content.parts.forEach(p => {
-            if (p.text) {
-              appendCard('card-thought', `💬 <strong>Agent:</strong> ${p.text}`);
+            if (p.function_call) {
+              const fc = p.function_call;
+              const argsStr = Object.entries(fc.args || {})
+                .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                .join(', ');
+
+              if (fc.name === 'announce_message') {
+                const msg = (fc.args && fc.args.message) ? fc.args.message : JSON.stringify(fc.args);
+                appendCard('card-announce', `📢 <strong>Spoken Announcement:</strong> &ldquo;${msg}&rdquo;`);
+              } else {
+                appendCard('card-tool', `🛠️ <strong>Action:</strong> <code>${fc.name}(${argsStr})</code>`);
+              }
             }
+
+            // 2. Tool Results / Responses
+            if (p.function_response) {
+              const fr = p.function_response;
+              let resStr = typeof fr.response === 'object' ? JSON.stringify(fr.response) : String(fr.response);
+              appendCard('card-tool-result', `📥 <strong>Result [${fr.name}]:</strong> ${resStr}`);
+            }
+
+            // 3. Agent Reasoning / Thoughts
+            if (p.text && p.text.trim()) {
+              appendCard('card-thought', `💭 <strong>Agent Thought:</strong> ${p.text}`);
+            }
+          });
+        }
+
+        // Fallback for actions.tool_calls if emitted separately
+        if (data.actions && data.actions.tool_calls) {
+          data.actions.tool_calls.forEach(tc => {
+            const argsStr = Object.entries(tc.args || {})
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(', ');
+            appendCard('card-tool', `🛠️ <strong>Action:</strong> <code>${tc.name}(${argsStr})</code>`);
           });
         }
       } else if (event.type === 'nav_progress') {
