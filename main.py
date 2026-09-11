@@ -80,9 +80,9 @@ def main():
     print(f"Live SSE Stream:   http://{config.host}:{config.port}/events/stream")
     print("=" * 65)
 
-    # 6. Serve the FastAPI Gateway
+    # 6. Serve the FastAPI Gateway (with fast 1s graceful shutdown timeout on Ctrl+C)
     try:
-        uvicorn.run(app, host=config.host, port=config.port)
+        uvicorn.run(app, host=config.host, port=config.port, timeout_graceful_shutdown=1)
     finally:
         motion_sensor.stop()
 

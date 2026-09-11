@@ -257,6 +257,7 @@
     .card-tool code { color: #56d364; font-weight: 600; }
     .card-prompt { border-left: 3px solid var(--accent-blue); background: #0d1829; }
     .card-stall { border-left: 3px solid var(--accent-red); background: #260d0d; color: #ff7b72; }
+    .card-alert { border-left: 3px solid var(--accent-red); background: #2b1111; color: #ff7b72; font-weight: 600; }
     .card-completed { border-left: 3px solid var(--accent-yellow); background: #1f1b0d; }
 
     /* Chat Bar */
@@ -457,8 +458,27 @@
       document.getElementById('btnFrontCam').classList.toggle('active', camName === 'front_camera');
     }
 
+    function setServerOffline(reason) {
+      const badge = document.getElementById('agentStatusBadge');
+      if (badge && badge.textContent !== 'Server: Offline') {
+        badge.textContent = 'Server: Offline';
+        badge.style.backgroundColor = '#6e7681';
+        appendCard('card-alert', `🛑 <strong>Server Disconnected:</strong> ${reason || 'Backend server stopped.'}`);
+        const streamImg = document.getElementById('mjpegStream');
+        if (streamImg) {
+          streamImg.style.opacity = '0.35';
+          streamImg.style.filter = 'grayscale(100%)';
+        }
+      }
+      if (window.evtSource) {
+        window.evtSource.close();
+      }
+    }
+
     // Connect to SSE stream
     const evtSource = new EventSource("/events/stream");
+    window.evtSource = evtSource;
+
     evtSource.onmessage = function(e) {
       try {
         const payload = JSON.parse(e.data);
@@ -466,6 +486,10 @@
       } catch (err) {
         console.error("SSE parse error", err);
       }
+    };
+
+    evtSource.onerror = function(err) {
+      setServerOffline("Connection to server closed.");
     };
 
     function handleStreamEvent(event) {
@@ -499,6 +523,8 @@
         updateNavProgress(event.data);
       } else if (event.type === 'telemetry') {
         updateTelemetry(event.data);
+      } else if (event.type === 'server_shutdown') {
+        setServerOffline("The backend was stopped by user (Ctrl+C).");
       }
     }
 

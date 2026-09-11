@@ -141,9 +141,11 @@ async def event_processor_loop():
             event_queue.task_done()
 
 
+is_shutting_down: bool = False
+
 async def telemetry_broadcast_loop():
     """Pushes real-time telemetry over the existing SSE stream (4 Hz) without polling."""
-    while True:
+    while not is_shutting_down:
         try:
             if sse_subscribers:
                 robot = get_robot()
@@ -174,6 +176,20 @@ async def startup_event():
     runtime = QuadrupedCognitiveRuntime()
     asyncio.create_task(event_processor_loop())
     asyncio.create_task(telemetry_broadcast_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Notifies active UI clients of shutdown and unblocks all streaming generators."""
+    global is_shutting_down
+    is_shutting_down = True
+    # Notify clients
+    await broadcast_sse("server_shutdown", {"message": "Server stopped by user."})
+    await asyncio.sleep(0.05)  # Yield to allow network buffers to flush before closing sockets
+    # Unblock all waiting queue.get() calls
+    for q in sse_subscribers:
+        await q.put(None)
+    render_executor.shutdown(wait=False)
 
 
 @app.post("/events")
@@ -292,11 +308,18 @@ async def event_stream(request: Request):
     async def sse_generator():
         try:
             yield "data: {\"type\": \"connected\", \"message\": \"SSE stream active\"}\n\n"
-            while True:
+            while not is_shutting_down:
                 if await request.is_disconnected():
                     break
-                data = await queue.get()
-                yield f"data: {data}\n\n"
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    if data is None or is_shutting_down:
+                        break
+                    yield f"data: {data}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
         finally:
             if queue in sse_subscribers:
                 sse_subscribers.remove(queue)
