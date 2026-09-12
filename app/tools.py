@@ -109,59 +109,60 @@ def walk_relative(distance_meters: float = 0.0, turn_degrees: float = 0.0) -> st
 
 
 # ---------------------------------------------------------------------------
-# Individual Simple Locomotion Tools (Easily reasoned by LLMs)
+# Action Manager Reference
+# ---------------------------------------------------------------------------
+
+from app.action_manager import ActionManager
+
+_action_manager: Optional[ActionManager] = None
+
+
+def get_action_manager() -> ActionManager:
+    global _action_manager
+    if _action_manager is None:
+        _action_manager = ActionManager(get_robot)
+    return _action_manager
+
+
+# ---------------------------------------------------------------------------
+# Individual Locomotion Tools
 # ---------------------------------------------------------------------------
 
 def walk_forward(distance_meters: float = 0.2) -> str:
-    """
-    Walk forward by a specified distance in meters.
-    Use this to approach objects, advance along paths, or move toward a room.
-    """
-    return walk_relative(distance_meters=abs(distance_meters), turn_degrees=0.0)
+    """Walk forward by a specified distance in meters."""
+    dist = abs(distance_meters)
+    get_action_manager().start_relative_motion("walk_forward", distance_meters=dist)
+    return f"Initiated walk_forward ({dist:.2f}m)."
 
 
 def walk_backward(distance_meters: float = 0.2) -> str:
-    """
-    Walk backward by a specified distance in meters.
-    Use this to back away from an obstacle or adjust positioning.
-    """
-    return walk_relative(distance_meters=-abs(distance_meters), turn_degrees=0.0)
+    """Walk backward by a specified distance in meters."""
+    dist = abs(distance_meters)
+    get_action_manager().start_relative_motion("walk_backward", distance_meters=-dist)
+    return f"Initiated walk_backward ({dist:.2f}m)."
 
 
 def turn_left(degrees: float = 90.0) -> str:
-    """
-    Rotate body counter-clockwise (to the left) by a given number of degrees (default: 90° quarter turn).
-    """
-    return walk_relative(distance_meters=0.0, turn_degrees=-abs(degrees))
+    """Rotate body counter-clockwise (to the left) by a given number of degrees."""
+    deg = abs(degrees)
+    get_action_manager().start_relative_motion("turn_left", turn_degrees=-deg)
+    return f"Initiated turn_left ({deg:.1f}°)."
 
 
 def turn_right(degrees: float = 90.0) -> str:
-    """
-    Rotate body clockwise (to the right) by a given number of degrees (default: 90° quarter turn).
-    """
-    return walk_relative(distance_meters=0.0, turn_degrees=abs(degrees))
+    """Rotate body clockwise (to the right) by a given number of degrees."""
+    deg = abs(degrees)
+    get_action_manager().start_relative_motion("turn_right", turn_degrees=deg)
+    return f"Initiated turn_right ({deg:.1f}°)."
 
 
 # ---------------------------------------------------------------------------
-# High-Level Navigation & Docking Tools (Non-Blocking & Interruptible)
+# High-Level Navigation & Docking Tools
 # ---------------------------------------------------------------------------
-
-from app.navigation import NavigationManager
-
-_nav_manager: Optional[NavigationManager] = None
-
-
-def get_nav_manager() -> NavigationManager:
-    global _nav_manager
-    if _nav_manager is None:
-        _nav_manager = NavigationManager(get_robot)
-    return _nav_manager
-
 
 def navigate_to_landmark(landmark_name: str) -> str:
     """
-    Begin non-blocking autonomous navigation to a domestic landmark.
-    The robot will navigate in the background while reporting progress updates.
+    Begin autonomous navigation to a domestic landmark.
     Supported landmarks: 'front_door', 'charging_dock', 'living_room', 'kitchen'.
     """
     landmark_key = landmark_name.strip().lower().replace(" ", "_")
@@ -170,47 +171,37 @@ def navigate_to_landmark(landmark_name: str) -> str:
         return f"Unknown landmark '{landmark_name}'. Valid landmarks are: {valid_keys}"
 
     target_x, target_y = config.landmarks[landmark_key]
-    nav = get_nav_manager()
-    res = nav.start_navigation(landmark_name=landmark_key, target_x=target_x, target_y=target_y)
+    mgr = get_action_manager()
+    res = mgr.start_navigation(landmark_name=landmark_key, target_x=target_x, target_y=target_y)
 
     if res.get("status") == "already_at_destination":
         return f"Already at landmark '{landmark_name}'."
 
     return (
         f"Navigation started towards '{landmark_name}' at ({target_x}, {target_y}). "
-        f"Distance: {res['initial_distance_m']}m. Estimated ETA: ~{res['estimated_eta_s']}s. "
-        f"You will receive live progress updates as the robot walks."
+        f"Distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s."
     )
 
 
-def stop_navigation() -> str:
-    """
-    Immediately halt the robot and cancel any active navigation or walking movement.
-    Call this whenever the user says 'Stop!', 'Wait!', or gives an urgent command.
-    """
-    nav = get_nav_manager()
-    res = nav.cancel_navigation()
+def stop_action() -> str:
+    """Immediately halt the robot and cancel any active movement, navigation, or gesture."""
+    mgr = get_action_manager()
+    res = mgr.cancel_action()
     if res.get("status") == "idle":
-        robot = get_robot()
-        robot.stop()
-        robot.stand()
         return "Robot is already stopped."
-    return f"Emergency stop executed: Navigation to '{res.get('landmark')}' cancelled. Robot brought to a safe stand."
+    return f"Emergency stop executed: '{res.get('action')}' cancelled. Robot brought to a safe stand."
 
 
 def return_to_charging_dock() -> str:
-    """
-    Autonomously navigates to the home charging dock and lowers onto the
-    custom metal charging plates once arrived.
-    """
+    """Autonomously navigate to the home charging dock and lower onto charging contacts."""
     robot = get_robot()
-    nav = get_nav_manager()
+    mgr = get_action_manager()
 
     def on_dock_reached():
         print("[CHARGING DOCK] Arrived at dock! Crouching onto metal contact plate...")
         robot.crouch()
 
-    res = nav.start_navigation(
+    res = mgr.start_navigation(
         landmark_name="charging_dock",
         target_x=0.0,
         target_y=0.0,
@@ -222,9 +213,8 @@ def return_to_charging_dock() -> str:
         return "Already at charging dock. Crouched onto metal contact plates."
 
     return (
-        f"Docking sequence initiated. Walking towards charging dock at (0.0, 0.0). "
-        f"Initial distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s. "
-        f"The robot will automatically crouch onto charging contacts upon arrival."
+        f"Docking sequence initiated towards (0.0, 0.0). "
+        f"Initial distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s."
     )
 
 
@@ -256,20 +246,10 @@ def capture_camera_image() -> Dict[str, Any]:
 
 
 def perform_handshake() -> str:
-    """
-    Performs the official Waveshare paw wave / handshake gesture.
-    The robot sits back onto its rear legs, raises its right front paw,
-    and shakes it to greet someone.
-    """
+    """Performs the official Waveshare paw wave / handshake gesture."""
     robot = get_robot()
-    robot.handshake()
-    # Step through simulation playback if in simulation
-    if hasattr(robot, "motion_queue"):
-        while len(robot.motion_queue) > 0:
-            if hasattr(robot, "step"):
-                robot.step()
-            time.sleep(0.002)
-    return "Handshake paw gesture completed."
+    get_action_manager().start_gesture("handshake", robot.handshake)
+    return "Initiated handshake paw gesture."
 
 
 def announce_message(message: str) -> str:

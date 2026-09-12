@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app.agent import QuadrupedCognitiveRuntime
 from app.config import config
-from app.tools import get_robot, get_nav_manager
+from app.tools import get_robot, get_action_manager
 
 app = FastAPI(title="WAVEGO Pro Cognitive Agent Gateway")
 
@@ -105,15 +105,15 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press, nav_completed, nav_stalled (High-priority action triggers & arrival alerts)
-    2: nav_feedback (Normal navigation progress feedback)
+    1: doorbell_press, action_completed, action_stalled, action_cancelled (Action completions & alerts)
+    2: action_progress (Normal action progress feedback)
     3: motion_detected, passive camera alert, generic sensor events
     """
     if event.event_type == "user_message":
         return 0
-    if event.event_type in ("doorbell_press", "nav_completed", "nav_stalled"):
+    if event.event_type in ("doorbell_press", "action_completed", "action_stalled", "action_cancelled"):
         return 1
-    if event.event_type == "nav_feedback":
+    if event.event_type == "action_progress":
         return 2
     if event.event_type == "motion_detected":
         return 3
@@ -229,17 +229,16 @@ async def telemetry_broadcast_loop():
                 robot = get_robot()
                 pos, _ = robot.get_pose()
                 rpy = robot.get_imu()
-                nav = get_nav_manager()
+                action_mgr = get_action_manager()
                 motion_sensor = getattr(app.state, "motion_sensor", None)
 
                 data = {
                     "pos": [round(float(pos[0]), 3), round(float(pos[1]), 3), round(float(pos[2]), 3)],
                     "yaw": round(float(rpy[2]), 1),
-                    "nav_target": nav.target_name if nav.is_navigating else None,
-                    "nav_distance": round(nav.remaining_distance, 2) if nav.is_navigating else 0.0,
-                    "nav_progress": nav.progress_pct if nav.is_navigating else 0.0,
-                    "nav_eta": nav.eta_seconds if nav.is_navigating else 0.0,
-                    "is_busy": is_agent_busy,
+                    "is_busy": is_agent_busy or action_mgr.is_busy,
+                    "active_action": action_mgr.active_action,
+                    "action_progress": action_mgr.progress_pct,
+                    "action_details": action_mgr.action_details,
                     "motion_suppressed": getattr(motion_sensor, "suppress_motion_detection", False) if motion_sensor else False,
                 }
                 await broadcast_sse("telemetry", data)
@@ -288,7 +287,7 @@ async def receive_event(event: RobotStimulusEvent):
         }
 
     # 2. Busy State Rate Limiting
-    # Protect priority 0 (user) and priority 1 (doorbell, nav_completed, nav_stalled) from being dropped!
+    # Protect priority 0 (user) and priority 1 (doorbell, action_completed, action_stalled) from being dropped!
     if is_agent_busy and priority >= 3:
         log_event_audit(event.event_type, event.source, priority, "dropped", detail="Robot actively busy with higher priority task")
         await broadcast_queue_state()
@@ -312,39 +311,33 @@ async def receive_event(event: RobotStimulusEvent):
         msg = event.payload.get("message") or event.payload.get("text") or ""
         agent_prompt = f"[USER MESSAGE from {event.source}]: {msg}"
 
-    elif event.event_type == "nav_feedback":
-        landmark = event.payload.get("landmark", "destination")
-        pct = event.payload.get("progress_pct", 0.0)
-        dist = event.payload.get("distance_remaining_m", 0.0)
-        eta = event.payload.get("eta_seconds", 0.0)
-        agent_prompt = (
-            f"[SYSTEM EVENT: NAVIGATION PROGRESS] En route to '{landmark}': "
-            f"{pct:.1f}% complete, {dist:.2f}m remaining, estimated ETA: {eta:.1f}s."
-        )
-        # Also broadcast progress directly to dashboard UI widget
-        await broadcast_sse("nav_progress", event.payload)
+    elif event.event_type == "action_progress":
+        # Live action progress broadcast directly to dashboard UI widget (does not interrupt agent)
+        await broadcast_sse("action_progress", event.payload)
+        return {"status": "broadcasted", "event_type": "action_progress"}
 
-    elif event.event_type == "nav_completed":
-        landmark = event.payload.get("landmark", "destination")
-        final_pos = event.payload.get("final_pos", [0, 0])
+    elif event.event_type == "action_completed":
+        action_name = event.payload.get("action", "action")
+        result = event.payload.get("result", "completed successfully")
+        pos = event.payload.get("position", [0, 0])
         agent_prompt = (
-            f"[SYSTEM EVENT: NAVIGATION COMPLETED] The robot has arrived at destination '{landmark}' "
-            f"(position: {final_pos}). Proceed with your next task (e.g. greeting visitor or inspecting area)."
+            f"[SYSTEM EVENT: ACTION COMPLETED] Action '{action_name}' completed. "
+            f"Details: {result}. Current position: {pos}. "
+            f"Conclude your next step or report status."
         )
 
-    elif event.event_type == "nav_stalled":
-        landmark = event.payload.get("landmark", "destination")
-        dist = event.payload.get("distance_remaining_m", 0.0)
+    elif event.event_type == "action_stalled":
+        action_name = event.payload.get("action", "action")
+        pos = event.payload.get("current_pos", [0, 0])
         agent_prompt = (
-            f"[SYSTEM ALERT: NAVIGATION STALLED] Robot forward progress toward '{landmark}' has stalled "
-            f"({dist:.2f}m remaining). A physical obstacle or wall was encountered! "
-            f"Locomotion has been safely halted. Please call `capture_camera_image` to inspect the blockage, "
-            f"and use `walk_backward` or turning to navigate around it."
+            f"[SYSTEM ALERT: ACTION STALLED] Action '{action_name}' was blocked by a physical obstruction "
+            f"at position {pos}! Locomotion stopped. Please call `capture_camera_image` to inspect, "
+            f"and navigate around the blockage."
         )
 
-    elif event.event_type == "nav_cancelled":
-        landmark = event.payload.get("landmark", "destination")
-        agent_prompt = f"[SYSTEM EVENT: NAVIGATION CANCELLED] Navigation to '{landmark}' was cancelled. Robot is safely standing."
+    elif event.event_type == "action_cancelled":
+        action_name = event.payload.get("action", "action")
+        agent_prompt = f"[SYSTEM EVENT: ACTION CANCELLED] Action '{action_name}' was cancelled. Robot is safely standing."
 
     elif event.source == "nest_doorbell" and event.event_type == "doorbell_press":
         person_name = event.payload.get("person_name")

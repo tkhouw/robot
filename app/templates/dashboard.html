@@ -891,8 +891,8 @@
             appendCard('card-tool', `🛠️ <strong>Action:</strong> <code>${tc.name}(${argsStr})</code>`);
           });
         }
-      } else if (event.type === 'nav_progress') {
-        updateNavProgress(event.data);
+      } else if (event.type === 'action_progress') {
+        updateActionProgress(event.data);
       } else if (event.type === 'telemetry') {
         updateTelemetry(event.data);
       } else if (event.type === 'queue_state') {
@@ -1114,7 +1114,22 @@
       if (!t || !t.pos) return;
       document.getElementById('telemPos').textContent = `${t.pos[0].toFixed(2)}, ${t.pos[1].toFixed(2)} m`;
       document.getElementById('telemYaw').textContent = `${t.yaw.toFixed(1)}°`;
-      document.getElementById('telemGoal').textContent = t.nav_target || 'None';
+      
+      const act = t.active_action;
+      const details = t.action_details || {};
+      let actDisplay = 'Idle';
+      if (act) {
+        if (details.landmark) {
+          actDisplay = `${act} (${details.landmark})`;
+        } else if (details.turn_degrees) {
+          actDisplay = `${act} (${Math.abs(details.turn_degrees).toFixed(0)}°)`;
+        } else if (details.distance_m) {
+          actDisplay = `${act} (${Math.abs(details.distance_m).toFixed(2)}m)`;
+        } else {
+          actDisplay = act;
+        }
+      }
+      document.getElementById('telemGoal').textContent = actDisplay;
       document.getElementById('telemMotion').textContent = t.motion_suppressed ? 'Suppressed' : 'Active';
 
       // SVG coordinates: MuJoCo Y is SVG -Y
@@ -1140,11 +1155,13 @@
         }
       }
 
-      // Update Nav Target Line
+      // Update Target Line if navigating to a landmark
       const targetLine = document.getElementById('navTargetLine');
       if (targetLine) {
-        if (t.nav_target && LANDMARK_COORDS[t.nav_target]) {
-          const [tgX, tgY] = LANDMARK_COORDS[t.nav_target];
+        const isNavigating = (t.active_action === 'navigate_to_landmark');
+        const landmark = details.landmark;
+        if (isNavigating && landmark && LANDMARK_COORDS[landmark]) {
+          const [tgX, tgY] = LANDMARK_COORDS[landmark];
           targetLine.setAttribute('x1', rX);
           targetLine.setAttribute('y1', rY);
           targetLine.setAttribute('x2', tgX);
@@ -1169,12 +1186,10 @@
       // Check if content exceeds 2 lines
       const contentEl = card.querySelector('.feed-card-content');
       const expandBtn = card.querySelector('.feed-expand-btn');
-
-      // Allow DOM to compute layout
       requestAnimationFrame(() => {
         if (contentEl.scrollHeight > contentEl.clientHeight + 4) {
-          card.classList.add('is-collapsible');
-          card.onclick = function() {
+          card.classList.add('can-expand');
+          expandBtn.onclick = () => {
             const isExp = card.classList.toggle('expanded');
             expandBtn.textContent = isExp ? '▴ click to collapse' : '▾ click to expand';
           };
@@ -1184,7 +1199,7 @@
       feed.scrollTop = feed.scrollHeight;
     }
 
-    function updateNavProgress(data) {
+    function updateActionProgress(data) {
       const card = document.getElementById('navProgressCard');
       const fill = document.getElementById('navProgressBar');
       const text = document.getElementById('navStatusText');
@@ -1192,8 +1207,14 @@
 
       card.classList.add('active');
       fill.style.width = `${data.progress_pct}%`;
-      text.textContent = `Navigating to ${data.landmark} (${data.progress_pct}%)`;
-      eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
+
+      if (data.action === 'navigate_to_landmark' && data.landmark) {
+        text.textContent = `Navigating to ${data.landmark} (${data.progress_pct}%)`;
+        eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
+      } else {
+        text.textContent = `${data.action || 'Action'} (${data.progress_pct}%)`;
+        eta.textContent = '';
+      }
 
       if (data.progress_pct >= 99) {
         setTimeout(() => card.classList.remove('active'), 2000);

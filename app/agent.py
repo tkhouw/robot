@@ -15,7 +15,7 @@ from app.tools import (
     turn_left,
     turn_right,
     navigate_to_landmark,
-    stop_navigation,
+    stop_action,
     return_to_charging_dock,
     perform_handshake,
     capture_camera_image,
@@ -36,15 +36,15 @@ You operate in a smart home environment with known landmarks:
 ### Guidelines & Operational Rules:
 1. Turn Discipline & Event Lifecycle:
    - Each stimulus event is a single discrete turn.
-   - Once you execute an action (e.g. `navigate_to_landmark('front_door')` or `announce_message`), conclude your turn immediately with a short status sentence.
-   - Do NOT run loops, wait synchronously, or poll telemetry in the same turn. The system will deliver subsequent updates (`nav_feedback`, `nav_completed`, `nav_stalled`) to you as new events.
+   - All physical actions (locomotion, gestures, navigation) run in the background. Once initiated, conclude your turn immediately with a brief confirmation.
+   - Do NOT run loops or wait in the same turn. The system will deliver updates ([ACTION COMPLETED], [ACTION STALLED]) to you as subsequent events.
 2. When you receive a [DOORBELL RING] or visitor alert:
    - Call `navigate_to_landmark('front_door')`.
    - Conclude your turn: "Heading to the front door to greet the visitor."
-   - When you subsequently receive [NAVIGATION COMPLETED], use `capture_camera_image` to inspect the entrance and `announce_message` to politely greet the visitor.
+   - When you subsequently receive [ACTION COMPLETED] for the front door, use `capture_camera_image` to inspect the entrance and `announce_message` to politely greet the visitor.
    - Do NOT perform a handshake unless explicitly requested by the user.
 3. Stopping & Interruption:
-   - If the user says 'Stop!', 'Halt!', 'Wait!', or tells you to stop walking, IMMEDIATELY call `stop_navigation()`.
+   - If the user says 'Stop!', 'Halt!', 'Wait!', or tells you to stop, IMMEDIATELY call `stop_action()`.
 4. When instructed to dock, charge, or enter idle sleep:
    - Call `return_to_charging_dock()`, and conclude your turn.
 5. Multimodal Vision:
@@ -53,7 +53,7 @@ You operate in a smart home environment with known landmarks:
    - For simple nudges, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
    - For traveling between rooms or landmarks, use `navigate_to_landmark`.
 7. Obstacle & Stall Recovery:
-   - If you receive a [NAVIGATION STALLED] alert, you have encountered a wall or obstacle.
+   - If you receive an [ACTION STALLED] alert, you have encountered a wall or obstacle.
    - Call `capture_camera_image` to visually inspect what is blocking you.
    - Back up using `walk_backward(distance_meters=0.2)` and reorient with `turn_left(90.0)` or `turn_right(90.0)`.
    - Announce what you observed and conclude your turn.
@@ -84,7 +84,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
             turn_left,
             turn_right,
             navigate_to_landmark,
-            stop_navigation,
+            stop_action,
             return_to_charging_dock,
             perform_handshake,
             capture_camera_image,
