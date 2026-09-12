@@ -350,10 +350,12 @@
       position: relative;
       transition: background 0.15s ease;
     }
-    .feed-card.is-collapsible {
+    .feed-card.is-collapsible,
+    .feed-card.can-expand {
       cursor: pointer;
     }
-    .feed-card.is-collapsible:hover {
+    .feed-card.is-collapsible:hover,
+    .feed-card.can-expand:hover {
       background: #161b22;
     }
     .feed-card-content {
@@ -364,11 +366,13 @@
       overflow: hidden;
       text-overflow: ellipsis;
       word-break: break-word;
+      white-space: normal;
     }
     .feed-card.expanded .feed-card-content {
       -webkit-line-clamp: unset;
       display: block;
       overflow: visible;
+      white-space: pre-wrap;
     }
     .feed-expand-btn {
       display: none;
@@ -377,10 +381,12 @@
       margin-top: 4px;
       user-select: none;
     }
-    .feed-card.is-collapsible .feed-expand-btn {
+    .feed-card.is-collapsible .feed-expand-btn,
+    .feed-card.can-expand .feed-expand-btn {
       display: inline-block;
     }
-    .feed-card.is-collapsible:hover .feed-expand-btn {
+    .feed-card.is-collapsible:hover .feed-expand-btn,
+    .feed-card.can-expand:hover .feed-expand-btn {
       color: #58a6ff;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -1188,11 +1194,14 @@
       const expandBtn = card.querySelector('.feed-expand-btn');
       requestAnimationFrame(() => {
         if (contentEl.scrollHeight > contentEl.clientHeight + 4) {
-          card.classList.add('can-expand');
-          expandBtn.onclick = () => {
+          card.classList.add('can-expand', 'is-collapsible');
+          const toggleExpand = (e) => {
+            // Avoid double-toggle if click originated on an interactive element like a link
+            if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
             const isExp = card.classList.toggle('expanded');
             expandBtn.textContent = isExp ? '▴ click to collapse' : '▾ click to expand';
           };
+          card.onclick = toggleExpand;
         }
       });
 
