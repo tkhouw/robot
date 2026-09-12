@@ -68,6 +68,10 @@ class ActionManager:
             "action_cancelled",
             {"action": action_name},
         )
+        self._emit_gateway_event(
+            "action_progress",
+            {"action": action_name, "progress_pct": 100.0, "status": "cancelled"},
+        )
 
         return {"status": "cancelled", "action": action_name}
 
@@ -92,6 +96,18 @@ class ActionManager:
         }
         self.progress_pct = 0.0
 
+        # Initial UI progress popup
+        self._emit_gateway_event(
+            "action_progress",
+            {
+                "action": action_name,
+                "progress_pct": 0.0,
+                "distance_m": distance_meters,
+                "turn_degrees": turn_degrees,
+                "status": "started",
+            },
+        )
+
         self._thread = threading.Thread(
             target=self._relative_motion_worker,
             args=(action_name, distance_meters, turn_degrees),
@@ -111,6 +127,12 @@ class ActionManager:
         self._active_action = gesture_name
         self._action_details = {"type": "gesture", "name": gesture_name}
         self.progress_pct = 0.0
+
+        # Initial UI progress popup
+        self._emit_gateway_event(
+            "action_progress",
+            {"action": gesture_name, "progress_pct": 0.0, "status": "started"},
+        )
 
         self._thread = threading.Thread(
             target=self._gesture_worker,
@@ -201,6 +223,7 @@ class ActionManager:
                 target_yaw_diff = abs(turn_degrees)
                 max_turn_time = max(15.0, (target_yaw_diff / 10.0) + 5.0)
                 t_start = time.time()
+                last_emit = t_start
                 unwrapped_turn = 0.0
                 prev_yaw = initial_yaw
 
@@ -220,6 +243,18 @@ class ActionManager:
                     prev_yaw = curr_yaw
                     self.progress_pct = min(99.0, round((abs(unwrapped_turn) / target_yaw_diff) * 100.0, 1))
 
+                    now = time.time()
+                    if (now - last_emit) >= 0.25:
+                        last_emit = now
+                        self._emit_gateway_event(
+                            "action_progress",
+                            {
+                                "action": action_name,
+                                "progress_pct": self.progress_pct,
+                                "turn_degrees": turn_degrees,
+                            },
+                        )
+
                     if abs(unwrapped_turn) >= target_yaw_diff:
                         break
 
@@ -235,6 +270,7 @@ class ActionManager:
                 robot.walk(speed, 0.0)
                 target_dist = abs(distance_meters)
                 t_start = time.time()
+                last_emit = t_start
 
                 # Stall detection for relative walking
                 last_progress_time = time.time()
@@ -250,10 +286,21 @@ class ActionManager:
                     traveled = math.hypot(curr_pos[0] - start_pos[0], curr_pos[1] - start_pos[1])
                     self.progress_pct = min(99.0, round((traveled / target_dist) * 100.0, 1))
 
+                    now = time.time()
+                    if (now - last_emit) >= 0.25:
+                        last_emit = now
+                        self._emit_gateway_event(
+                            "action_progress",
+                            {
+                                "action": action_name,
+                                "progress_pct": self.progress_pct,
+                                "distance_m": distance_meters,
+                            },
+                        )
+
                     if traveled >= target_dist:
                         break
 
-                    now = time.time()
                     if traveled > (last_traveled + 0.02):
                         last_progress_time = now
                         last_traveled = traveled
@@ -283,6 +330,10 @@ class ActionManager:
                 curr_pos, _ = robot.get_pose()
                 curr_rpy = robot.get_imu()
                 self.progress_pct = 100.0
+                self._emit_gateway_event(
+                    "action_progress",
+                    {"action": action_name, "progress_pct": 100.0, "status": "completed"},
+                )
                 res_desc = f"x={curr_pos[0]:.2f}m, y={curr_pos[1]:.2f}m, heading={curr_rpy[2]:.1f}°"
                 self._emit_gateway_event(
                     "action_completed",
@@ -303,14 +354,30 @@ class ActionManager:
             gesture_fn()
             # Step simulation frames smoothly while gesture motion queue plays out
             if hasattr(robot, "motion_queue"):
+                initial_q_len = max(1, len(robot.motion_queue))
+                last_emit = time.time()
                 while len(robot.motion_queue) > 0 and not self._cancel_event.is_set():
                     if hasattr(robot, "step"):
                         robot.step()
                     time.sleep(0.002)
 
+                    remaining = len(robot.motion_queue)
+                    self.progress_pct = min(99.0, round(((initial_q_len - remaining) / initial_q_len) * 100.0, 1))
+                    now = time.time()
+                    if (now - last_emit) >= 0.25:
+                        last_emit = now
+                        self._emit_gateway_event(
+                            "action_progress",
+                            {"action": gesture_name, "progress_pct": self.progress_pct},
+                        )
+
             if not self._cancel_event.is_set():
                 robot.stand()
                 self.progress_pct = 100.0
+                self._emit_gateway_event(
+                    "action_progress",
+                    {"action": gesture_name, "progress_pct": 100.0, "status": "completed"},
+                )
                 curr_pos, _ = robot.get_pose()
                 self._emit_gateway_event(
                     "action_completed",
@@ -367,6 +434,16 @@ class ActionManager:
 
                     if on_complete_callback:
                         on_complete_callback()
+
+                    self._emit_gateway_event(
+                        "action_progress",
+                        {
+                            "action": "navigate_to_landmark",
+                            "landmark": landmark_name,
+                            "progress_pct": 100.0,
+                            "status": "completed",
+                        },
+                    )
 
                     self._emit_gateway_event(
                         "action_completed",

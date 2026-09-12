@@ -1205,19 +1205,42 @@
       const text = document.getElementById('navStatusText');
       const eta = document.getElementById('navEtaText');
 
-      card.classList.add('active');
-      fill.style.width = `${data.progress_pct}%`;
-
-      if (data.action === 'navigate_to_landmark' && data.landmark) {
-        text.textContent = `Navigating to ${data.landmark} (${data.progress_pct}%)`;
-        eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
-      } else {
-        text.textContent = `${data.action || 'Action'} (${data.progress_pct}%)`;
-        eta.textContent = '';
+      if (data.status === 'cancelled') {
+        card.classList.remove('active');
+        fill.style.width = '0%';
+        return;
       }
 
-      if (data.progress_pct >= 99) {
-        setTimeout(() => card.classList.remove('active'), 2000);
+      card.classList.add('active');
+      fill.style.width = `${Math.min(100, Math.max(0, data.progress_pct))}%`;
+
+      let actionTitle = data.action || 'Action';
+      if (data.action === 'navigate_to_landmark' && data.landmark) {
+        actionTitle = `Navigating to ${data.landmark}`;
+      } else if (data.action === 'walk_forward' || data.action === 'walk_backward') {
+        const d = data.distance_m ? Math.abs(data.distance_m).toFixed(2) + 'm' : '';
+        actionTitle = `${data.action} ${d}`.trim();
+      } else if (data.action === 'turn_left' || data.action === 'turn_right') {
+        const deg = data.turn_degrees ? Math.abs(data.turn_degrees).toFixed(0) + '°' : '';
+        actionTitle = `${data.action} ${deg}`.trim();
+      } else if (data.action === 'perform_handshake') {
+        actionTitle = 'Performing Handshake Paw Wave';
+      }
+
+      if (data.status === 'completed' || data.progress_pct >= 100) {
+        text.textContent = `✓ ${actionTitle} (Completed)`;
+        eta.textContent = '';
+        setTimeout(() => {
+          card.classList.remove('active');
+          fill.style.width = '0%';
+        }, 1500);
+      } else {
+        text.textContent = `${actionTitle} (${data.progress_pct.toFixed(0)}%)`;
+        if (data.eta_seconds !== undefined && data.distance_remaining_m !== undefined) {
+          eta.textContent = `ETA: ${data.eta_seconds}s (${data.distance_remaining_m}m)`;
+        } else {
+          eta.textContent = '';
+        }
       }
     }
 
