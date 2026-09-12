@@ -171,12 +171,16 @@ class NavigationManager:
                     )
                     break
 
-                # Stall Check: Check if robot is making physical progress toward target
-                if dist < (last_progress_dist - min_progress_delta):
+                # Stall Check: Detect if robot is physically stuck against an obstacle
+                # Never trigger stalls while robot is executing an in-place turn
+                if getattr(robot, "is_turning_in_place", False):
+                    last_progress_time = now
+                    last_progress_dist = dist
+                elif dist < (last_progress_dist - min_progress_delta):
                     last_progress_time = now
                     last_progress_dist = dist
                 elif (now - last_progress_time) >= stall_timeout:
-                    # Stalled into a wall or obstacle! Stop motors and alert the agent
+                    # Stalled into a wall or obstacle while walking! Stop motors and alert the agent
                     print(f"\n[NAVIGATION STALL DETECTED] Robot stalled moving to '{landmark_name}'! Stopping motors...")
                     robot.stop()
                     robot.stand()

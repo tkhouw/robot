@@ -58,31 +58,48 @@ class BaseRobot(ABC):
     # These methods compile semantic requests into official WAVEGO JSON packets.
     # =========================================================================
 
+    def __init__(self):
+        self.is_moving: bool = False
+        self.is_turning_in_place: bool = False
+
     def stand(self) -> None:
         """Commands the robot to stand in default stable stance (T=110)."""
+        self.is_moving = False
+        self.is_turning_in_place = False
         self.send_cmd({"T": CMD_STAND_UP})
 
     def stand_height(self, height: float = 95.0) -> None:
         """Sets standing body height in millimeters (T=114)."""
+        self.is_moving = False
+        self.is_turning_in_place = False
         self.send_cmd({"T": CMD_STAND_UP_HEIGHT, "h": height})
 
     def walk(self, fb: float = 50.0, lr: float = 0.0) -> None:
         """
         Commands locomotion with forward/backward velocity (FB) and steering (LR) (T=111).
         Range: -100.0 to 100.0.
+        Turning in place implies is_moving is True.
         """
+        self.is_moving = (abs(fb) > 2.0 or abs(lr) > 2.0)
+        self.is_turning_in_place = (abs(fb) <= 2.0 and abs(lr) > 2.0)
         self.send_cmd({"T": CMD_BASIC_MOVE, "FB": fb, "LR": lr})
 
     def stop(self) -> None:
         """Stops locomotion (T=111, FB=0, LR=0)."""
+        self.is_moving = False
+        self.is_turning_in_place = False
         self.send_cmd({"T": CMD_BASIC_MOVE, "FB": 0, "LR": 0})
 
     def crouch(self) -> None:
         """Commands the robot to crouch low (T=112, func=1)."""
+        self.is_moving = False
+        self.is_turning_in_place = False
         self.send_cmd({"T": CMD_BASIC_FUNC, "func": FUNC_STAY_LOW})
 
     def handshake(self) -> None:
         """Plays handshake greeting routine (T=112, func=2)."""
+        self.is_moving = True
+        self.is_turning_in_place = False
         self.send_cmd({"T": CMD_BASIC_FUNC, "func": FUNC_HANDSHAKE})
 
     def set_single_leg(self, leg_id: int, x: float, y: float, z: float) -> None:
@@ -97,6 +114,7 @@ class PhysicalRobotController(BaseRobot):
     """
 
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 115200):
+        super().__init__()
         self.port = port
         self.baudrate = baudrate
         self.serial = None

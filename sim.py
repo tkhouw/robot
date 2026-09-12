@@ -44,6 +44,7 @@ class WavegoSim(BaseRobot):
     """
 
     def __init__(self, xml_path: str = "models/wavego/scene.xml"):
+        super().__init__()
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
         self.kinematics = WavegoKinematics()
@@ -55,6 +56,7 @@ class WavegoSim(BaseRobot):
         self.gait_speed = 1.5   # Gait frequency (cycles/second)
         self.stand_h = STAND_HEIGHT
         self.is_moving = False
+        self.is_turning_in_place = False
 
         # Actuator mapping (12 serial-bus servo actuators)
         self.actuator_names = [self.model.actuator(i).name for i in range(self.model.nu)]
@@ -155,6 +157,7 @@ class WavegoSim(BaseRobot):
         cmd_type = cmd_dict.get("T")
 
         if cmd_type == CMD_STAND_UP:
+            self.is_turning_in_place = False
             self.move_fb = 0.0
             self.move_lr = 0.0
             self.stand_h = STAND_HEIGHT
@@ -162,6 +165,7 @@ class WavegoSim(BaseRobot):
             self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
 
         elif cmd_type == CMD_STAND_UP_HEIGHT:
+            self.is_turning_in_place = False
             self.stand_h = float(cmd_dict.get("h", STAND_HEIGHT))
             self.move_fb = 0.0
             self.move_lr = 0.0
@@ -208,8 +212,10 @@ class WavegoSim(BaseRobot):
         elif cmd_type == CMD_BASIC_MOVE:
             self.move_fb = float(cmd_dict.get("FB", 0))
             self.move_lr = float(cmd_dict.get("LR", 0))
+            self.is_turning_in_place = (abs(self.move_fb) <= 2.0 and abs(self.move_lr) > 2.0)
 
         elif cmd_type == CMD_BASIC_FUNC:
+            self.is_turning_in_place = False
             func = cmd_dict.get("func", 0)
             if func == FUNC_STAY_LOW:  # Stay low / crouch
                 self.motion_queue.clear()

@@ -46,21 +46,30 @@ def walk_relative(distance_meters: float = 0.0, turn_degrees: float = 0.0) -> st
         turn_dir = 35.0 if turn_degrees > 0 else -35.0
         robot.walk(0.0, turn_dir)
         target_yaw_diff = abs(turn_degrees)
+        # Allocate enough time for full rotation (~12 deg/sec) plus margin
+        max_turn_time = max(15.0, (target_yaw_diff / 10.0) + 5.0)
         t_start = time.time()
 
-        while (time.time() - t_start) < 25.0:
+        # Continuous phase-unwrapped rotation tracking (handles 180°, 360°, and multiple spins)
+        unwrapped_turn = 0.0
+        prev_yaw = initial_yaw
+
+        while (time.time() - t_start) < max_turn_time:
             if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
                 robot.step()
             time.sleep(0.002)
 
             curr_yaw = robot.get_imu()[2]
-            net_diff = curr_yaw - initial_yaw
-            while net_diff > 180.0:
-                net_diff -= 360.0
-            while net_diff < -180.0:
-                net_diff += 360.0
+            delta = curr_yaw - prev_yaw
+            while delta > 180.0:
+                delta -= 360.0
+            while delta < -180.0:
+                delta += 360.0
 
-            if abs(net_diff) >= target_yaw_diff:
+            unwrapped_turn += delta
+            prev_yaw = curr_yaw
+
+            if abs(unwrapped_turn) >= target_yaw_diff:
                 break
 
         robot.stand()
