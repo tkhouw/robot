@@ -1,5 +1,5 @@
 import os
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 import openai
 import google.genai.types as types
 from google.adk.agents import Agent
@@ -60,8 +60,131 @@ You operate in a smart home environment with known landmarks:
 """
 
 
+class MultimodalToolOpenAILlm(OpenAILlm):
+    """
+    Subclasses ADK OpenAILlm to preserve multimodal media parts (e.g. image bytes)
+    returned by tools inside role: 'tool' messages.
+    """
+
+    async def generate_content_async(
+        self, llm_request, stream: bool = False
+    ) -> AsyncGenerator[Any, None]:
+        import base64
+        import json
+        from google.adk.labs.openai._openai_llm import _content_to_openai_messages
+
+        messages = []
+        if llm_request.config and llm_request.config.system_instruction:
+            messages.append({
+                "role": "system",
+                "content": llm_request.config.system_instruction,
+            })
+
+        for content in llm_request.contents or []:
+            converted = _content_to_openai_messages(content)
+            # Inspect if content contains a function_response with multimodal parts
+            for part in getattr(content, "parts", []) or []:
+                if getattr(part, "function_response", None) and getattr(part.function_response, "parts", None):
+                    resp_id = part.function_response.id or ""
+                    for msg in converted:
+                        if msg.get("role") == "tool" and msg.get("tool_call_id") == resp_id:
+                            text_body = msg.get("content", "")
+                            content_list = [{"type": "text", "text": text_body}]
+                            for subpart in part.function_response.parts:
+                                if getattr(subpart, "inline_data", None) and subpart.inline_data.data:
+                                    mime = subpart.inline_data.mime_type or "image/png"
+                                    b64 = base64.b64encode(subpart.inline_data.data).decode("utf-8")
+                                    content_list.append({
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:{mime};base64,{b64}"},
+                                    })
+                            msg["content"] = content_list
+            messages.extend(converted)
+
+        # Delegate kwargs assembly and LLM execution using original methods
+        from google.adk.labs.openai._openai_llm import (
+            _function_declaration_to_openai_tool,
+            _response_to_llm_response,
+            enforce_strict_openai_schema,
+        )
+        from pydantic import BaseModel
+        import copy
+
+        tools = []
+        if (
+            llm_request.config
+            and llm_request.config.tools
+            and llm_request.config.tools[0].function_declarations
+        ):
+            tools = [
+                _function_declaration_to_openai_tool(tool)
+                for tool in llm_request.config.tools[0].function_declarations
+            ]
+
+        tool_choice = "auto" if tools else None
+
+        response_format = None
+        if llm_request.config and llm_request.config.response_schema:
+            schema = llm_request.config.response_schema
+            schema_name = "response"
+            schema_dict = {}
+
+            if isinstance(schema, type) and issubclass(schema, BaseModel):
+                schema_dict = schema.model_json_schema()
+                schema_name = schema.__name__
+            elif isinstance(schema, BaseModel):
+                schema_dict = schema.__class__.model_json_schema()
+                schema_name = schema.__class__.__name__
+            elif isinstance(schema, dict):
+                schema_dict = copy.deepcopy(schema)
+                if "title" in schema_dict:
+                    schema_name = str(schema_dict["title"])
+
+            if schema_dict:
+                enforce_strict_openai_schema(schema_dict)
+                response_format = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema_name,
+                        "strict": True,
+                        "schema": schema_dict,
+                    },
+                }
+        elif (
+            llm_request.config
+            and llm_request.config.response_mime_type == "application/json"
+        ):
+            response_format = {"type": "json_object"}
+
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools if tools else None,
+            "tool_choice": tool_choice,
+            "max_tokens": self.max_tokens,
+            "response_format": response_format,
+        }
+
+        if llm_request.config:
+            if getattr(llm_request.config, "temperature", None) is not None:
+                kwargs["temperature"] = llm_request.config.temperature
+            if getattr(llm_request.config, "top_p", None) is not None:
+                kwargs["top_p"] = llm_request.config.top_p
+            if getattr(llm_request.config, "stop_sequences", None):
+                kwargs["stop"] = llm_request.config.stop_sequences
+            if getattr(llm_request.config, "max_output_tokens", None) is not None:
+                kwargs["max_tokens"] = llm_request.config.max_output_tokens
+
+        if not stream:
+            response = await self._openai_client.chat.completions.create(**kwargs)
+            yield _response_to_llm_response(response)
+        else:
+            async for response in self._generate_content_streaming(kwargs):
+                yield response
+
+
 def create_agent(model_name: Optional[str] = None) -> Agent:
-    """Instantiates the Google ADK Agent backed by OpenRouter."""
+    """Instantiates the Google ADK Agent backed by OpenRouter with multimodal tool support."""
     chosen_model = model_name or config.model_name
 
     client = openai.AsyncOpenAI(
@@ -69,7 +192,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
         api_key=config.openrouter_api_key,
     )
 
-    llm = OpenAILlm(
+    llm = MultimodalToolOpenAILlm(
         model=chosen_model,
         client=client,
     )

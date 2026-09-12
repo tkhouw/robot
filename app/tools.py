@@ -3,10 +3,10 @@ ADK Tools for WAVEGO Pro Quadruped Robot.
 Wraps BaseRobot hardware and simulation calls into typed LLM-callable functions.
 """
 
-import base64
 import math
 import time
 from typing import Any, Dict, Optional
+from google.genai import types as genai_types
 from robot_interface import BaseRobot
 from app.config import config
 
@@ -225,23 +225,25 @@ def return_to_charging_dock() -> str:
 def capture_camera_image() -> Dict[str, Any]:
     """
     Captures an RGB image from the robot's front eye-level camera.
-    Returns the visual frame for the agent to inspect its surroundings,
-    verify who is at the door, or confirm task completion.
+    Returns a multimodal image Part for Gemini vision inspection,
+    allowing the agent to inspect its surroundings, identify visitors,
+    or check for obstacles.
     """
     robot = get_robot()
-    if hasattr(robot, "get_camera_image"):
-        png_bytes = robot.get_camera_image()
-        b64_str = base64.b64encode(png_bytes).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64_str}"
+    png_bytes = robot.get_camera_image()
+    if png_bytes is not None:
         return {
             "status": "success",
             "description": "Captured front camera frame.",
-            "image_data_url": data_url,
+            "image": genai_types.Part.from_bytes(
+                data=png_bytes,
+                mime_type="image/png",
+            ),
         }
     else:
         return {
             "status": "unavailable",
-            "description": "Camera capture is not supported on this robot hardware interface.",
+            "description": "Camera capture is not supported or not connected on this robot hardware interface.",
         }
 
 

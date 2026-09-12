@@ -5,7 +5,7 @@ and physical hardware (ESP32 serial / wireless communication).
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Union
+from typing import Dict, Any, Tuple, Union, Optional
 import numpy as np
 
 from wavego_protocol import (
@@ -52,6 +52,15 @@ class BaseRobot(ABC):
         Returns current body Euler angles: (roll, pitch, yaw) in degrees or radians.
         """
         pass
+
+    def get_camera_image(
+        self, width: int = 320, height: int = 240, camera_name: str = "front_camera"
+    ) -> Optional[bytes]:
+        """
+        Captures an RGB image from the robot camera and returns PNG-encoded bytes.
+        Returns None if camera hardware/stream is unavailable or not connected.
+        """
+        return None
 
     # =========================================================================
     # High-Level Semantic Wrappers (Shared identically between Sim & Real)
@@ -138,3 +147,13 @@ class PhysicalRobotController(BaseRobot):
     def get_imu(self) -> Tuple[float, float, float]:
         # Queried via MPU6050 feedback
         return 0.0, 0.0, 0.0
+
+    def get_camera_image(
+        self, width: int = 320, height: int = 240, camera_name: str = "front_camera"
+    ) -> Optional[bytes]:
+        """
+        Captures an RGB frame from the physical camera (e.g. USB V4L2 or ESP32-CAM stream).
+        Returns None until physical video stream pipeline is configured.
+        """
+        # Future implementation: query OpenCV VideoCapture or HTTP JPEG stream
+        return None
