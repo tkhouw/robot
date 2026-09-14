@@ -25,76 +25,101 @@
     <material name="counter_top" rgba="0.20 0.22 0.25 1.0" specular="0.4" shininess="0.6"/>
     <material name="cardboard" rgba="0.76 0.58 0.38 1.0" specular="0.05" shininess="0.05"/>
     <material name="tape_stripe" rgba="0.88 0.72 0.48 1.0" specular="0.1" shininess="0.1"/>
+    <material name="tv_frame" rgba="0.1 0.1 0.12 1.0" specular="0.6" shininess="0.6"/>
+    <material name="tv_screen" rgba="0.05 0.08 0.12 1.0" specular="0.8" shininess="0.9"/>
+    <material name="plant_pot" rgba="0.85 0.80 0.75 1.0" specular="0.2" shininess="0.3"/>
+    <material name="plant_soil" rgba="0.22 0.16 0.12 1.0" specular="0.0" shininess="0.0"/>
+    <material name="plant_leaves" rgba="0.18 0.55 0.22 1.0" specular="0.15" shininess="0.2"/>
   </asset>
 
   <worldbody>
-    <light pos="1.0 0 2.8" dir="0 0 -1" directional="true"/>
+    <light pos="1.5 0 3.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.02" type="plane" material="groundplane"/>
-    <!-- 3rd-person spectator camera: elevated looking down with wide high-angle perspective -->
-    <camera name="tracking_cam" mode="trackcom" target="base" pos="-1.5 -1.2 2.6" xyaxes="0.781 -0.625 0 0.495 0.619 0.609"/>
 
-    <!-- ==================== APARTMENT WALLS (H = 1.20m, thickness = 0.08m) ==================== -->
-    <!-- Enclosure: x in [-0.80, 2.70], y in [-1.40, 1.40] -->
-    <!-- North Wall: y = 1.40, size: half-x=1.75, half-y=0.04, half-z=0.60, center z=0.60 -->
-    <geom name="wall_north" type="box" size="1.75 0.04 0.60" pos="0.95 1.40 0.60" material="wall_paint"/>
-    <!-- South Wall: y = -1.40 -->
-    <geom name="wall_south" type="box" size="1.75 0.04 0.60" pos="0.95 -1.40 0.60" material="wall_paint"/>
-    <!-- West Wall (Behind Dock): x = -0.80 -->
-    <geom name="wall_west" type="box" size="0.04 1.40 0.60" pos="-0.80 0.0 0.60" material="wall_paint"/>
-    <!-- East Wall: segmented to leave a realistic doorway opening (width 0.80m) at Front Door (2.2, 0.0) -->
-    <geom name="wall_east_n" type="box" size="0.04 0.45 0.60" pos="2.70 0.95 0.60" material="wall_paint"/>
-    <geom name="wall_east_s" type="box" size="0.04 0.45 0.60" pos="2.70 -0.95 0.60" material="wall_paint"/>
-    <geom name="door_lintel" type="box" size="0.04 0.50 0.10" pos="2.70 0.0 1.10" material="wall_paint"/>
+    <!-- 3rd-person spectator camera: looking STRAIGHT DOWN on the robot from directly overhead -->
+    <camera name="tracking_cam" mode="trackcom" target="base" pos="0 0 3.2" xyaxes="1 0 0 0 1 0"/>
 
-    <!-- ==================== REALISTIC KITCHEN COUNTER ISLAND ==================== -->
-    <!-- Dimensions: Length = 1.80m, Depth = 0.65m, Counter Height = 0.90m (standard 36") -->
-    <!-- Position: x in [0.80, 2.60], y = -0.60. Leaves wide corridor (y in [-0.275, +0.40]) -->
-    <body name="kitchen_counter" pos="1.70 -0.60 0">
-      <!-- White cabinet base (H = 0.86m) -->
-      <geom name="kc_base" type="box" size="0.88 0.30 0.43" pos="0 0 0.43" material="counter_cabinet"/>
-      <!-- Polished dark quartz countertop with overhanging lip (H = 0.04m, top at 0.90m) -->
-      <geom name="kc_top" type="box" size="0.92 0.34 0.02" pos="0 0 0.88" material="counter_top"/>
+    <!-- ==================== APARTMENT PERIMETER WALLS (5.6m x 4.4m, 2.5x floor area) ==================== -->
+    <!-- Enclosure: x in [-1.20, 4.40] (span 5.60m, center 1.60m), y in [-2.20, 2.20] (span 4.40m, center 0.00m) -->
+    <!-- Obstacle geoms set to group="3" for high-speed X-Ray outline rendering -->
+    <!-- North Wall: y = 2.20 -->
+    <geom name="wall_north" type="box" size="2.80 0.04 0.60" pos="1.60 2.20 0.60" material="wall_paint" group="3"/>
+    <!-- South Wall: y = -2.20 -->
+    <geom name="wall_south" type="box" size="2.80 0.04 0.60" pos="1.60 -2.20 0.60" material="wall_paint" group="3"/>
+    <!-- West Wall (Behind Dock): x = -1.20 -->
+    <geom name="wall_west" type="box" size="0.04 2.20 0.60" pos="-1.20 0.0 0.60" material="wall_paint" group="3"/>
+    <!-- East Wall: x = 4.40, with 0.85m doorway at Front Door (3.80, 0.0) -->
+    <geom name="wall_east_n" type="box" size="0.04 0.88 0.60" pos="4.40 1.32 0.60" material="wall_paint" group="3"/>
+    <geom name="wall_east_s" type="box" size="0.04 0.88 0.60" pos="4.40 -1.32 0.60" material="wall_paint" group="3"/>
+    <geom name="door_lintel" type="box" size="0.04 0.44 0.10" pos="4.40 0.0 1.10" material="wall_paint" group="3"/>
+
+    <!-- ==================== INTERIOR PARTITION WALL (Kitchen vs Living Room) ==================== -->
+    <!-- Runs along x = 2.10m from y = -2.20m to y = -0.50m (length 1.70m), leaving 1.0m doorway into kitchen -->
+    <geom name="kitchen_wall" type="box" size="0.04 0.85 0.60" pos="2.10 -1.35 0.60" material="wall_paint" group="3"/>
+
+    <!-- ==================== KITCHEN ISLAND & COUNTER ==================== -->
+    <!-- In dedicated kitchen area: center at (3.20, -1.30) -->
+    <body name="kitchen_counter" pos="3.20 -1.30 0">
+      <geom name="kc_base" type="box" size="0.88 0.32 0.43" pos="0 0 0.43" material="counter_cabinet" group="3"/>
+      <geom name="kc_top" type="box" size="0.92 0.36 0.02" pos="0 0 0.88" material="counter_top" group="3"/>
     </body>
 
-    <!-- ==================== REALISTIC 3-SEATER LIVING ROOM SOFA ==================== -->
-    <!-- Dimensions: Length = 2.00m, Depth = 0.85m, Backrest H = 0.78m, Seat H = 0.42m -->
-    <!-- Positioned along North wall: center at (1.10, 0.95) -->
-    <body name="living_sofa" pos="1.10 0.95 0">
-      <!-- Main base / frame -->
-      <geom name="sofa_frame" type="box" size="1.00 0.40 0.16" pos="0 0 0.16" material="sofa_fabric"/>
-      <!-- Seat cushions (3 sections) -->
-      <geom name="sofa_seat1" type="box" size="0.30 0.32 0.06" pos="-0.62 -0.04 0.38" material="sofa_cushion"/>
-      <geom name="sofa_seat2" type="box" size="0.30 0.32 0.06" pos="0.00 -0.04 0.38" material="sofa_cushion"/>
-      <geom name="sofa_seat3" type="box" size="0.30 0.32 0.06" pos="0.62 -0.04 0.38" material="sofa_cushion"/>
-      <!-- Backrest upright (H = 0.78m) -->
-      <geom name="sofa_back" type="box" size="0.96 0.10 0.20" pos="0 0.32 0.58" material="sofa_cushion"/>
-      <!-- Left armrest -->
-      <geom name="sofa_arm_l" type="box" size="0.08 0.42 0.15" pos="-0.94 0 0.47" material="sofa_fabric"/>
-      <!-- Right armrest -->
-      <geom name="sofa_arm_r" type="box" size="0.08 0.42 0.15" pos="0.94 0 0.47" material="sofa_fabric"/>
+    <!-- ==================== LIVING ROOM 3-SEATER SOFA ==================== -->
+    <!-- Positioned along North wall: center at (1.10, 1.70) -->
+    <body name="living_sofa" pos="1.10 1.70 0">
+      <geom name="sofa_frame" type="box" size="1.00 0.40 0.16" pos="0 0 0.16" material="sofa_fabric" group="3"/>
+      <geom name="sofa_seat1" type="box" size="0.30 0.32 0.06" pos="-0.62 -0.04 0.38" material="sofa_cushion" group="3"/>
+      <geom name="sofa_seat2" type="box" size="0.30 0.32 0.06" pos="0.00 -0.04 0.38" material="sofa_cushion" group="3"/>
+      <geom name="sofa_seat3" type="box" size="0.30 0.32 0.06" pos="0.62 -0.04 0.38" material="sofa_cushion" group="3"/>
+      <geom name="sofa_back" type="box" size="0.96 0.10 0.20" pos="0 0.32 0.58" material="sofa_cushion" group="3"/>
+      <geom name="sofa_arm_l" type="box" size="0.08 0.42 0.15" pos="-0.94 0 0.47" material="sofa_fabric" group="3"/>
+      <geom name="sofa_arm_r" type="box" size="0.08 0.42 0.15" pos="0.94 0 0.47" material="sofa_fabric" group="3"/>
     </body>
 
-    <!-- ==================== REALISTIC WOOD & METAL COFFEE TABLE ==================== -->
-    <!-- Dimensions: Length = 1.05m, Width = 0.55m, Height = 0.42m -->
-    <!-- Positioned in front of sofa: center at (1.10, 0.35) -->
-    <!-- Elevated top with 4 slim corner legs allows robot to perceive legs and table clearance -->
-    <body name="coffee_table" pos="1.10 0.35 0">
-      <!-- Solid Oak Tabletop (thickness 0.03m, top at 0.42m) -->
-      <geom name="ct_top" type="box" size="0.52 0.26 0.015" pos="0 0 0.405" material="wood_oak"/>
-      <!-- 4 Corner Legs (H = 0.39m, cylinder radius 0.015m) -->
-      <geom name="ct_leg_fl" type="cylinder" size="0.015 0.195" pos="-0.48 -0.22 0.195" material="table_metal"/>
-      <geom name="ct_leg_fr" type="cylinder" size="0.015 0.195" pos="0.48 -0.22 0.195" material="table_metal"/>
-      <geom name="ct_leg_bl" type="cylinder" size="0.015 0.195" pos="-0.48 0.22 0.195" material="table_metal"/>
-      <geom name="ct_leg_br" type="cylinder" size="0.015 0.195" pos="0.48 0.22 0.195" material="table_metal"/>
+    <!-- ==================== COFFEE TABLE (Walkable Clearance Underneath) ==================== -->
+    <!-- Positioned in front of sofa: center at (1.10, 0.85) -->
+    <body name="coffee_table" pos="1.10 0.85 0">
+      <geom name="ct_top" type="box" size="0.52 0.26 0.015" pos="0 0 0.405" material="wood_oak" group="3"/>
+      <geom name="ct_leg_fl" type="cylinder" size="0.015 0.195" pos="-0.48 -0.22 0.195" material="table_metal" group="3"/>
+      <geom name="ct_leg_fr" type="cylinder" size="0.015 0.195" pos="0.48 -0.22 0.195" material="table_metal" group="3"/>
+      <geom name="ct_leg_bl" type="cylinder" size="0.015 0.195" pos="-0.48 0.22 0.195" material="table_metal" group="3"/>
+      <geom name="ct_leg_br" type="cylinder" size="0.015 0.195" pos="0.48 0.22 0.195" material="table_metal" group="3"/>
     </body>
 
-    <!-- ==================== REALISTIC CARDBOARD DELIVERY BOX ==================== -->
-    <!-- Dimensions: Length = 0.38m, Width = 0.32m, Height = 0.28m (Standard medium parcel) -->
-    <!-- Position: placed in corridor near (1.20, -0.15) -->
-    <body name="delivery_box" pos="1.20 -0.15 0">
-      <geom name="box_body" type="box" size="0.19 0.16 0.14" pos="0 0 0.14" material="cardboard"/>
-      <!-- Packing tape stripe across top -->
-      <geom name="box_tape" type="box" size="0.035 0.161 0.002" pos="0 0 0.281" material="tape_stripe"/>
+    <!-- ==================== 55-INCH WIDESCREEN TV & MEDIA CONSOLE ==================== -->
+    <!-- Positioned facing the sofa: center at (1.10, -0.20) -->
+    <body name="media_center" pos="1.10 -0.20 0">
+      <!-- Low Media Console Table (H = 0.36m, Length = 1.40m, Depth = 0.35m) -->
+      <geom name="tv_stand" type="box" size="0.70 0.18 0.18" pos="0 0 0.18" material="wood_oak" group="3"/>
+      <!-- TV Pedestal base -->
+      <geom name="tv_base" type="box" size="0.22 0.12 0.01" pos="0 0 0.37" material="tv_frame" group="3"/>
+      <geom name="tv_stem" type="box" size="0.04 0.03 0.08" pos="0 0 0.45" material="tv_frame" group="3"/>
+      <!-- TV Bezel Frame (55 inch: 1.22m x 0.70m) -->
+      <geom name="tv_bezel" type="box" size="0.61 0.02 0.35" pos="0 0 0.88" material="tv_frame" group="3"/>
+      <!-- Glossy TV Display Screen -->
+      <geom name="tv_display" type="box" size="0.59 0.005 0.33" pos="0 -0.016 0.88" material="tv_screen" group="3"/>
+    </body>
+
+    <!-- ==================== POTTED LIVING ROOM HOUSEPLANT ==================== -->
+    <!-- Positioned in corner by living room: ( -0.80, 1.80 ) -->
+    <body name="potted_plant" pos="-0.80 1.80 0">
+      <!-- Ceramic Planter Pot (Radius 0.20m, Height 0.42m) -->
+      <geom name="plant_pot" type="cylinder" size="0.20 0.21" pos="0 0 0.21" material="plant_pot" group="3"/>
+      <!-- Top Soil -->
+      <geom name="plant_soil" type="cylinder" size="0.185 0.01" pos="0 0 0.415" material="plant_soil" group="3"/>
+      <!-- Lush Foliage Canopies (layered spheres for realistic green houseplant look) -->
+      <geom name="leaf_center" type="sphere" size="0.26" pos="0 0 0.65" material="plant_leaves" group="3"/>
+      <geom name="leaf_sw" type="sphere" size="0.18" pos="-0.12 -0.10 0.58" material="plant_leaves" group="3"/>
+      <geom name="leaf_ne" type="sphere" size="0.18" pos="0.12 0.10 0.60" material="plant_leaves" group="3"/>
+      <geom name="leaf_se" type="sphere" size="0.16" pos="0.10 -0.12 0.55" material="plant_leaves" group="3"/>
+      <geom name="leaf_top" type="sphere" size="0.15" pos="0 0 0.82" material="plant_leaves" group="3"/>
+    </body>
+
+    <!-- ==================== CORRIDOR DELIVERY PARCEL ==================== -->
+    <!-- Placed in entranceway near (2.50, 0.15) -->
+    <body name="delivery_box" pos="2.50 0.15 0">
+      <geom name="box_body" type="box" size="0.19 0.16 0.14" pos="0 0 0.14" material="cardboard" group="3"/>
+      <geom name="box_tape" type="box" size="0.035 0.161 0.002" pos="0 0 0.281" material="tape_stripe" group="3"/>
     </body>
   </worldbody>
 </mujoco>

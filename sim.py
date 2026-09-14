@@ -79,6 +79,21 @@ class WavegoSim(BaseRobot):
         self._lock = threading.Lock()
         self._renderers: Dict[tuple, mujoco.Renderer] = {}
 
+        # Cache robot-specific geom IDs for X-Ray silhouette rendering
+        self._robot_geom_ids = set()
+        env_bodies = {'world', 'kitchen_counter', 'living_sofa', 'coffee_table', 'delivery_box', 'media_center', 'potted_plant'}
+        for g_id in range(self.model.ngeom):
+            b_id = self.model.geom_bodyid[g_id]
+            b_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, b_id)
+            if b_name and b_name not in env_bodies:
+                self._robot_geom_ids.add(g_id)
+
+        # Preconfigure rendering options: full scene and robot-only (hides group 3 obstacles)
+        self._opt_full = mujoco.MjvOption()
+        self._opt_full.geomgroup[3] = 1
+        self._opt_robot_only = mujoco.MjvOption()
+        self._opt_robot_only.geomgroup[3] = 0
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -275,8 +290,29 @@ class WavegoSim(BaseRobot):
 
         with self._lock:
             renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name)
+            renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_full)
             rgb_array = renderer.render()
+
+            # For top-down spectator camera, guarantee robot visibility with high-visibility outline
+            if camera_name == "tracking_cam" and self._robot_geom_ids:
+                try:
+                    import scipy.ndimage
+                    # Pass 2: segmentation pass with obstacles hidden (group 3 disabled)
+                    renderer.enable_segmentation_rendering()
+                    renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_robot_only)
+                    seg = renderer.render()
+                    renderer.disable_segmentation_rendering()
+
+                    # Find robot pixels
+                    robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
+                    if np.any(robot_mask):
+                        dilated = scipy.ndimage.binary_dilation(robot_mask, iterations=2)
+                        outline = dilated & ~robot_mask
+                        rgb_array = rgb_array.copy()
+                        # Draw glowing bright cyan/teal tracking outline (0, 235, 255)
+                        rgb_array[outline] = [0, 235, 255]
+                except Exception:
+                    pass
 
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
@@ -288,14 +324,33 @@ class WavegoSim(BaseRobot):
     ) -> bytes:
         """
         Fast JPEG rendering for live web streaming over MJPEG.
+        Outlines robot when viewing tracking_cam even if occluded by furniture.
         """
         import io
         from PIL import Image
 
         with self._lock:
             renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name)
+            renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_full)
             rgb_array = renderer.render()
+
+            # For top-down spectator camera, guarantee robot visibility with high-visibility outline
+            if camera_name == "tracking_cam" and self._robot_geom_ids:
+                try:
+                    import scipy.ndimage
+                    renderer.enable_segmentation_rendering()
+                    renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_robot_only)
+                    seg = renderer.render()
+                    renderer.disable_segmentation_rendering()
+
+                    robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
+                    if np.any(robot_mask):
+                        dilated = scipy.ndimage.binary_dilation(robot_mask, iterations=2)
+                        outline = dilated & ~robot_mask
+                        rgb_array = rgb_array.copy()
+                        rgb_array[outline] = [0, 235, 255]
+                except Exception:
+                    pass
 
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
