@@ -18,6 +18,9 @@ If you are new to robotics, kinematics, or the **MuJoCo** physics engine, this g
 > 
 > Our [`wavego_kinematics.py`](wavego_kinematics.py) is a direct, standalone Python port of Waveshare's official `BodyCtrl.cpp` / `BodyCtrl.h` closed-form inverse kinematics and crawl/trot gaits. The upstream C++ code is used solely as an offline reference; no C++ dependencies are required at runtime.
 
+> [!TIP]
+> Disclaimer: This is a personal project.  The views, code, and opinions expressed here are my own and do not represent those of my current or past employers.
+
 ---
 
 ## Table of Contents
