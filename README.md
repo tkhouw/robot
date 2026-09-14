@@ -212,9 +212,9 @@ robot/
 ├── app/
 │   ├── __init__.py             # Application package marker
 │   ├── config.py               # Pydantic settings: OpenRouter API, model, landmarks, server port
-│   ├── tools.py                # Typed Google ADK tools (walk_forward, docking, vision, gestures)
-│   ├── agent.py                # Google ADK Cognitive Agent using OpenRouter DeepSeek vision
-│   ├── navigation.py           # Closed-loop landmark navigation worker, heading controller, stall detection
+│   ├── tools.py                # Typed Google ADK tools (walk, dock, vision, gestures, telemetry)
+│   ├── agent.py                # Google ADK Cognitive Agent using OpenRouter multimodal vision
+│   ├── action_manager.py       # Unified background action executor: navigation, relative motion, gestures & stall detection
 │   ├── vision_sensor.py        # Passive low-cost frame-differencing motion detector
 │   ├── gateway.py              # FastAPI REST, SSE Event Stream Server, and Priority Event Queue
 │   └── templates/
@@ -237,10 +237,10 @@ robot/
 
 1. **Cognitive Agent & Tools ([`app/agent.py`](app/agent.py), [`app/tools.py`](app/tools.py))**:
    Powered by Google ADK with OpenRouter (`deepseek/deepseek-v4-flash-vision-exp`). The agent has access to granular locomotion tools (`walk_forward`, `walk_backward`, `turn_left`, `turn_right`), home navigation (`navigate_to_landmark`, `return_to_charging_dock`), multimodal vision (`capture_camera_image`), greeting gestures (`perform_handshake`), and speech announcements (`announce_message`).
-2. **Autonomous Closed-Loop Navigation Engine ([`app/navigation.py`](app/navigation.py))**:
-   Manages closed-loop waypoint navigation between smart home landmarks with proportional heading correction, automatic stall/obstacle detection via odometry delta monitoring, and priority event triggers (`nav_completed`, `nav_stalled`, `nav_feedback`).
+2. **Unified Background Action Engine ([`app/action_manager.py`](app/action_manager.py))**:
+   Coordinates all asynchronous physical movements in the background (closed-loop landmark navigation with proportional heading correction, relative linear walking, relative turning, and multi-step gestures) with odometry-based stall detection and standardized lifecycle events (`action_progress`, `action_completed`, `action_stalled`, `action_cancelled`).
 3. **Event Ingestion Gateway & Priority Queue ([`app/gateway.py`](app/gateway.py))**:
-   FastAPI web service hosting an `asyncio.PriorityQueue` (`P0` Urgent user commands, `P1` High-priority doorbell rings and stall alerts, `P2` Normal navigation feedback, `P3` Background motion). Broadcasts robot telemetry, queue states, and native ADK cognitive events over Server-Sent Events (`/events/stream`).
+   FastAPI web service hosting an `asyncio.PriorityQueue` (`P0` Urgent user commands, `P1` High-priority doorbell rings and stall alerts, `P2` Normal action completion feedback, `P3` Background motion). Broadcasts robot telemetry, queue states, and native ADK cognitive events over Server-Sent Events (`/events/stream`).
 4. **Passive Vision Motion Sensor ([`app/vision_sensor.py`](app/vision_sensor.py))**:
    Zero-cost local frame differencing running at 2 FPS on the robot's front eye-level camera. Detects scene motion without calling external LLM APIs, firing events only when movement occurs.
 5. **Hardware Abstraction Layer ([`robot_interface.py`](robot_interface.py), [`wavego_protocol.py`](wavego_protocol.py))**:
@@ -285,23 +285,26 @@ The **Smart Home Mission Control Dashboard** provides a unified real-time operat
    - **Full Edge-to-Edge Responsive Canvas**: Automatically resizes to fit your browser or display pane with true 1:1 metric scale.
    - **Height Presets & Draggable Handle**: Toggle between **S** (220px), **M** (340px), and **L** (500px), or drag the bottom-right corner to any custom height.
    - **Click-to-Navigate**: Click directly on any landmark (⚡ **Dock**, 🚪 **Front Door**, 🛋️ **Living Room**, 🍳 **Kitchen**) to dispatch the robot to that location.
-   - **Dynamic Odometry Trail & Nav Target**: Visualizes the robot's path across the floor in real-time, with a dashed guide line pointing toward the active destination.
+   - **Dynamic Odometry Trail & Nav Target**: Visualizes the robot's path across the floor in real-time, with a dashed guide line pointing toward the active destination during navigation.
    - **Hover Coordinates**: Real-time metric readout (`X: 1.20m, Y: 0.00m`) follows your mouse.
 3. **Stimulus Dispatch Station**:
    - **🔔 Ring Doorbell**: Triggers a simulated visitor event with custom visitor names (e.g. *Alice*).
    - **⚡ Return to Dock**: Sends an urgent command for the robot to return to its home base and crouch onto charging contact plates.
-   - **🛑 Emergency Stop**: Immediately cuts motor drive and halts navigation.
+   - **🛑 Emergency Stop**: Immediately cuts motor drive and halts active locomotion or gestures.
    - **Interactive User Prompt Box**: Send natural language requests directly to the agent (e.g., *"Walk forward 0.5 meters and look around"*).
-4. **RobotStimulusEvent Priority Queue Visualizer**:
+4. **Live Action Progress & Execution Status**:
+   - Real-time animated progress bar showing percent completion and estimated time remaining (ETA) across all actions (landmark navigation, linear walking, turning, and gestures).
+   - Dismisses automatically upon completion with a checkmark confirmation or upon cancellation.
+5. **RobotStimulusEvent Priority Queue Visualizer**:
    - Displays real-time **Active Processing** task status with priority badge (`P0`, `P1`, `P2`, `P3`).
    - Live list of waiting events in the priority queue.
    - Collapsible **Audit Log Drawer** recording timestamped history of enqueued, completed, and dropped events.
-5. **Real-Time Cognition & Action Feed**:
+6. **Real-Time Cognition & Action Feed**:
    - **💭 Agent Thoughts**: Displays internal LLM reasoning and scene interpretation in purple.
    - **🛠️ Action Calls**: Green cards displaying exact tool executions with typed keyword arguments (e.g. `navigate_to_landmark(landmark_name="front_door")`).
    - **📥 Tool Results**: Cyan/slate cards displaying execution feedback.
    - **📢 Spoken Announcements**: Warm amber cards highlighting speech announced through the robot's speaker (`announce_message`).
-   - **Auto-Collapsing Cards**: Any entry longer than 2 lines automatically collapses with a `▾ click to expand` toggle, keeping the feed clean and readable.
+   - **Expandable Cards**: Any entry longer than 2 lines automatically collapses with a `▾ click to expand` toggle, allowing users to click anywhere on the card to read full thoughts and outputs.
 
 ### External Webhook Triggers (cURL API)
 You can also trigger events externally via HTTP:
