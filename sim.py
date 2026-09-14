@@ -79,20 +79,17 @@ class WavegoSim(BaseRobot):
         self._lock = threading.Lock()
         self._renderers: Dict[tuple, mujoco.Renderer] = {}
 
-        # Cache robot-specific geom IDs for X-Ray silhouette rendering
+        # Cache robot-specific and environment geom IDs for X-Ray silhouette rendering
         self._robot_geom_ids = set()
+        self._env_geom_ids = set()
         env_bodies = {'world', 'kitchen_counter', 'living_sofa', 'coffee_table', 'delivery_box', 'media_center', 'potted_plant'}
         for g_id in range(self.model.ngeom):
             b_id = self.model.geom_bodyid[g_id]
             b_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, b_id)
             if b_name and b_name not in env_bodies:
                 self._robot_geom_ids.add(g_id)
-
-        # Preconfigure rendering options: full scene and robot-only (hides group 3 obstacles)
-        self._opt_full = mujoco.MjvOption()
-        self._opt_full.geomgroup[3] = 1
-        self._opt_robot_only = mujoco.MjvOption()
-        self._opt_robot_only.geomgroup[3] = 0
+            else:
+                self._env_geom_ids.add(g_id)
 
         # Settle physics for 50 steps
         for _ in range(50):
@@ -290,18 +287,25 @@ class WavegoSim(BaseRobot):
 
         with self._lock:
             renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_full)
+            renderer.update_scene(self.data, camera=camera_name)
             rgb_array = renderer.render()
 
             # For top-down spectator camera, guarantee robot visibility with high-visibility outline
             if camera_name == "tracking_cam" and self._robot_geom_ids:
                 try:
                     import scipy.ndimage
-                    # Pass 2: segmentation pass with obstacles hidden (group 3 disabled)
+                    # Pass 2: segmentation pass with environment alpha zeroed to reveal occluded robot
+                    env_indices = list(self._env_geom_ids)
+                    orig_alpha = self.model.geom_rgba[env_indices, 3].copy()
+                    self.model.geom_rgba[env_indices, 3] = 0.0
+
                     renderer.enable_segmentation_rendering()
-                    renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_robot_only)
+                    renderer.update_scene(self.data, camera=camera_name)
                     seg = renderer.render()
                     renderer.disable_segmentation_rendering()
+
+                    # Restore environment alpha
+                    self.model.geom_rgba[env_indices, 3] = orig_alpha
 
                     # Find robot pixels
                     robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
@@ -331,17 +335,23 @@ class WavegoSim(BaseRobot):
 
         with self._lock:
             renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_full)
+            renderer.update_scene(self.data, camera=camera_name)
             rgb_array = renderer.render()
 
             # For top-down spectator camera, guarantee robot visibility with high-visibility outline
             if camera_name == "tracking_cam" and self._robot_geom_ids:
                 try:
                     import scipy.ndimage
+                    env_indices = list(self._env_geom_ids)
+                    orig_alpha = self.model.geom_rgba[env_indices, 3].copy()
+                    self.model.geom_rgba[env_indices, 3] = 0.0
+
                     renderer.enable_segmentation_rendering()
-                    renderer.update_scene(self.data, camera=camera_name, scene_option=self._opt_robot_only)
+                    renderer.update_scene(self.data, camera=camera_name)
                     seg = renderer.render()
                     renderer.disable_segmentation_rendering()
+
+                    self.model.geom_rgba[env_indices, 3] = orig_alpha
 
                     robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
                     if np.any(robot_mask):
@@ -374,6 +384,9 @@ class WavegoSim(BaseRobot):
 
             with viewer_cm as viewer:
                 viewer.opt.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+                # Enable all geom groups in the 3D GUI viewer so all environment assets are visible
+                for g in range(6):
+                    viewer.opt.geomgroup[g] = 1
 
                 while viewer.is_running():
                     now = time.time()

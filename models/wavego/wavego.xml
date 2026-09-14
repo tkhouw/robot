@@ -56,6 +56,7 @@
       <geom type="box" size="0.065 0.025 0.018" pos="0 0 0.015" mass="0.38"/>
       <site name="imu" pos="0 0 0.02"/>
       <camera name="front_camera" pos="0.105 0 0.02" fovy="60" xyaxes="0 -1 0 0 0 1"/>
+      <camera name="tracking_cam" pos="0 0 0.90" fovy="45" xyaxes="0 -1 0 1 0 0"/>
 
       <!-- ==================== FRONT LEFT (LF) ==================== -->
       <body name="FL_hip" pos="0.0493 0.0285 0.006">
