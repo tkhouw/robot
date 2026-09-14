@@ -53,7 +53,7 @@ class WavegoSim(BaseRobot):
         self.move_fb = 0.0      # Forward / Backward (-100 to 100)
         self.move_lr = 0.0      # Turn Left / Right (-100 to 100)
         self.walk_cycle = 0.0   # Gait cycle phase [0, 1)
-        self.gait_speed = 1.5   # Gait frequency (cycles/second)
+        self.gait_speed = 2.2   # Gait frequency (cycles/second) - authentic brisk quadruped trot
         self.stand_h = STAND_HEIGHT
 
         # Actuator mapping (12 serial-bus servo actuators)
@@ -82,7 +82,10 @@ class WavegoSim(BaseRobot):
         # Cache robot-specific and environment geom IDs for X-Ray silhouette rendering
         self._robot_geom_ids = set()
         self._env_geom_ids = set()
-        env_bodies = {'world', 'kitchen_counter', 'living_sofa', 'coffee_table', 'delivery_box', 'media_center', 'potted_plant'}
+        env_bodies = {
+            'world', 'living_sofa', 'coffee_table', 'delivery_box',
+            'media_center', 'potted_plant', 'refrigerator', 'dining_table'
+        }
         for g_id in range(self.model.ngeom):
             b_id = self.model.geom_bodyid[g_id]
             b_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, b_id)

@@ -242,11 +242,22 @@
       stroke-width: 0.006;
       rx: 0.015;
     }
-    .map-obstacle-counter {
-      fill: #3b2c1d;
-      stroke: #6e4e2a;
-      stroke-width: 0.006;
+    .map-obstacle-fridge {
+      fill: #2d333b;
+      stroke: #768390;
+      stroke-width: 0.008;
       rx: 0.01;
+    }
+    .map-obstacle-dining {
+      fill: #432b17;
+      stroke: #8a6c42;
+      stroke-width: 0.008;
+      rx: 0.02;
+    }
+    .map-obstacle-flower {
+      fill: #e63946;
+      stroke: #f1faee;
+      stroke-width: 0.004;
     }
     .map-obstacle-box {
       fill: #443725;
@@ -673,19 +684,29 @@
 
             <!-- ==================== APARTMENT FLOORPLAN OBSTACLES ==================== -->
             <!-- Note: MuJoCo +Y is SVG -Y -->
-            <!-- Perimeter Walls (X in [-1.20, 4.40], Y in [-2.20, 2.20]) -->
-            <rect class="map-obstacle-wall" x="-1.20" y="-2.24" width="5.60" height="0.08"/>  <!-- North Wall (MuJoCo Y=2.20) -->
-            <rect class="map-obstacle-wall" x="-1.20" y="2.16" width="5.60" height="0.08"/>   <!-- South Wall (MuJoCo Y=-2.20) -->
-            <rect class="map-obstacle-wall" x="-1.24" y="-2.24" width="0.08" height="4.48"/> <!-- West Wall (MuJoCo X=-1.20) -->
-            <!-- East Wall (X=4.40) with 0.88m Doorway Opening at Y=0.0 -->
-            <rect class="map-obstacle-wall" x="4.36" y="-2.24" width="0.08" height="1.80"/>  <!-- East North (MuJoCo Y in [0.44, 2.20]) -->
-            <rect class="map-obstacle-wall" x="4.36" y="0.44" width="0.08" height="1.80"/>   <!-- East South (MuJoCo Y in [-2.20, -0.44]) -->
+            <!-- Perimeter Walls (X in [-1.20, 5.00], Y in [-2.40, 2.40]) -->
+            <rect class="map-obstacle-wall" x="-1.20" y="-2.44" width="6.20" height="0.08"/>  <!-- North Wall (MuJoCo Y=2.40) -->
+            <rect class="map-obstacle-wall" x="-1.20" y="2.36" width="6.20" height="0.08"/>   <!-- South Wall (MuJoCo Y=-2.40) -->
+            <rect class="map-obstacle-wall" x="-1.24" y="-2.44" width="0.08" height="4.88"/> <!-- West Wall (MuJoCo X=-1.20) -->
+            <!-- East Wall (X=5.00) with 0.90m Doorway Opening at Y=0.0 -->
+            <rect class="map-obstacle-wall" x="4.96" y="-2.44" width="0.08" height="1.95"/>  <!-- East North (MuJoCo Y in [0.45, 2.40]) -->
+            <rect class="map-obstacle-wall" x="4.96" y="0.45" width="0.08" height="1.95"/>   <!-- East South (MuJoCo Y in [-2.40, -0.45]) -->
 
-            <!-- Interior Partition Wall (Kitchen vs Living Room, X=2.10, MuJoCo Y in [-2.20, -0.50] -> SVG Y in [0.50, 2.20]) -->
-            <rect class="map-obstacle-wall" x="2.06" y="0.50" width="0.08" height="1.70"/>
+            <!-- Interior Partition Wall (Kitchen vs Living Room, X=2.10, MuJoCo Y in [-2.40, -0.70] -> SVG Y in [0.70, 2.40]) -->
+            <rect class="map-obstacle-wall" x="2.06" y="0.70" width="0.08" height="1.70"/>
 
-            <!-- Kitchen Counter Island (MuJoCo center 3.20, -1.30; size 1.84m x 0.72m) -> SVG center (3.20, +1.30) -->
-            <rect class="map-obstacle-counter" x="2.28" y="0.94" width="1.84" height="0.72" rx="0.02"/>
+            <!-- Modern French Door Refrigerator (MuJoCo center 4.55, -2.00; size 0.72m x 0.70m) -> SVG center (4.55, +2.00) -->
+            <rect class="map-obstacle-fridge" x="4.19" y="1.65" width="0.72" height="0.70" rx="0.02"/>
+            <!-- Fridge handle accents -->
+            <line x1="4.15" y1="1.80" x2="4.15" y2="2.20" stroke="#adb5bd" stroke-width="0.015" stroke-linecap="round"/>
+
+            <!-- Spacious Kitchen Dining Table (MuJoCo center 3.50, -1.25; size 1.10m x 0.75m) -> SVG center (3.50, +1.25) -->
+            <rect class="map-obstacle-dining" x="2.95" y="0.875" width="1.10" height="0.75" rx="0.03"/>
+            <!-- Flower Arrangement on Dining Table -->
+            <circle cx="3.50" cy="1.25" r="0.055" fill="#f8f9fa" stroke="#ced4da" stroke-width="0.008"/>
+            <circle class="map-obstacle-flower" cx="3.48" cy="1.23" r="0.032"/>
+            <circle cx="3.52" cy="1.27" r="0.028" fill="#ffb703" stroke="#fff" stroke-width="0.004"/>
+            <circle cx="3.52" cy="1.22" r="0.026" fill="#ff006e" stroke="#fff" stroke-width="0.004"/>
 
             <!-- Living Room 3-Seater Sofa (MuJoCo center 1.10, +1.70; size 2.00m x 0.85m) -> SVG center (1.10, -1.70) -->
             <rect class="map-obstacle-furniture" x="0.10" y="-2.125" width="2.00" height="0.85" rx="0.04"/>
@@ -711,8 +732,8 @@
               <rect x="-0.03" y="-0.03" width="0.06" height="0.06" rx="0.012" fill="#fff"/>
             </g>
 
-            <!-- Landmark 2: Front Door (3.8, 0.0) -> SVG Y=0.0 -->
-            <g class="landmark-node" id="nodeDoor" transform="translate(3.8, 0.0)" onclick="handleLandmarkClick('front_door', 'Front Door')">
+            <!-- Landmark 2: Front Door (4.4, 0.0) -> SVG Y=0.0 -->
+            <g class="landmark-node" id="nodeDoor" transform="translate(4.4, 0.0)" onclick="handleLandmarkClick('front_door', 'Front Door')">
               <circle r="0.09" fill="#1f6feb" fill-opacity="0.25" filter="url(#glowBlue)"/>
               <circle r="0.06" fill="#1f6feb" stroke="#388bfd" stroke-width="0.012"/>
               <rect x="-0.025" y="-0.035" width="0.05" height="0.07" rx="0.006" fill="#fff"/>
@@ -725,8 +746,8 @@
               <circle r="0.025" fill="#fff"/>
             </g>
 
-            <!-- Landmark 4: Kitchen (3.1, -1.2) -> Inverted MuJoCo -Y is SVG +Y (+1.2) -->
-            <g class="landmark-node" id="nodeKitchen" transform="translate(3.1, 1.2)" onclick="handleLandmarkClick('kitchen', 'Kitchen')">
+            <!-- Landmark 4: Kitchen (3.5, -1.2) -> Inverted MuJoCo -Y is SVG +Y (+1.2) -->
+            <g class="landmark-node" id="nodeKitchen" transform="translate(3.5, 1.2)" onclick="handleLandmarkClick('kitchen', 'Kitchen')">
               <circle r="0.09" fill="#d29922" fill-opacity="0.25" filter="url(#glowOrange)"/>
               <circle r="0.06" fill="#bb8009" stroke="#f0883e" stroke-width="0.012"/>
               <circle r="0.025" fill="#fff"/>
@@ -1137,12 +1158,12 @@
       const aspect = w / h;
 
       // Arena bounds to comfortably enclose all landmarks and apartment perimeter:
-      // Apartment spans X in [-1.20, 4.40] (span 5.60m) and Y in [-2.20, 2.20] (span 4.40m)
-      // Center of arena is (1.60, 0.0)
-      const centerX = 1.60;
+      // Apartment spans X in [-1.20, 5.00] (span 6.20m) and Y in [-2.40, 2.40] (span 4.80m)
+      // Center of arena is (1.90, 0.0)
+      const centerX = 1.90;
       const centerY = 0.0;
-      const minSpanY = 4.8; // Vertical height to fit north & south walls with margins
-      const minSpanX = 6.2; // Horizontal width to fit dock to front door with margins
+      const minSpanY = 5.2; // Vertical height to fit north & south walls with margins
+      const minSpanX = 6.8; // Horizontal width to fit dock to front door with margins
 
       let spanY = minSpanY;
       let spanX = spanY * aspect;

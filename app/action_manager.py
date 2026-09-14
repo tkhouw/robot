@@ -171,7 +171,7 @@ class ActionManager:
                 "eta_seconds": 0.0,
             }
 
-        eta = round(initial_dist / 0.06, 1)
+        eta = round(initial_dist / 0.11, 1)
         self._cancel_event.clear()
         self._active_action = "navigate_to_landmark"
         self._action_details = {
@@ -266,7 +266,7 @@ class ActionManager:
 
             # 2. Linear motion
             if abs(distance_meters) > 0.01 and not self._cancel_event.is_set():
-                speed = 50.0 if distance_meters > 0 else -50.0
+                speed = 100.0 if distance_meters > 0 else -100.0
                 robot.walk(speed, 0.0)
                 target_dist = abs(distance_meters)
                 t_start = time.time()
@@ -500,7 +500,7 @@ class ActionManager:
                 else:
                     # Forward with smooth proportional heading correction
                     lr_correction = max(-25.0, min(25.0, -heading_err * 1.5))
-                    robot.walk(fb=50.0, lr=lr_correction)
+                    robot.walk(fb=75.0, lr=lr_correction)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
                 if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
