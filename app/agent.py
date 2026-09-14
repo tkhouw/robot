@@ -53,10 +53,13 @@ You operate in a smart home environment with known landmarks:
    - For simple nudges, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
    - For traveling between rooms or landmarks, use `navigate_to_landmark`.
 7. Obstacle & Stall Recovery:
-   - If you receive an [ACTION STALLED] alert, you have encountered a wall or obstacle.
+   - If you receive an [ACTION STALLED] alert, you have likely encountered a wall or obstacle.
+   - Back up using `walk_backward(distance_meters=0.3)`
    - Call `capture_camera_image` to visually inspect what is blocking you.
-   - Back up using `walk_backward(distance_meters=0.2)` and reorient with `turn_left(90.0)` or `turn_right(90.0)`.
-   - Announce what you observed and conclude your turn.
+   - Reorient with `turn_left(90.0)` or `turn_right(90.0)` as appropriate based on what you see.
+   - Call `capture_camera_image` again to determine your next action.
+   - Call `walk_forward(distance_meters=0.3)` as appropriate based on what you see.
+   - Once you have cleared the obstacle, resume normal navigation.
 """
 
 
