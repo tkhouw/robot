@@ -411,6 +411,12 @@ async def event_stream(request: Request):
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
 
+@app.get("/landmarks")
+async def get_landmarks():
+    """Returns the registered landmarks and their coordinates from config.py."""
+    return {"landmarks": config.landmarks}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_index():
     """Serves the interactive Portrait / Landscape web dashboard."""

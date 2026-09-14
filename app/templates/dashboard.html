@@ -1071,15 +1071,42 @@
       }
     }
 
-    // Arena Map Interactivity & Odometry Trail State
-    const LANDMARK_COORDS = {
-      charging_dock: [0.0, 0.0],
-      front_door: [1.2, 0.0],
-      living_room: [0.6, 0.5],
-      kitchen: [0.8, -0.6]
-    };
+    // Arena Map Interactivity & Dynamic Landmarks from Single Source of Truth (/landmarks)
+    let LANDMARK_COORDS = {};
     let odometryPoints = [];
     const MAX_TRAIL_POINTS = 120;
+
+    async function fetchLandmarks() {
+      try {
+        const resp = await fetch('/landmarks');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.landmarks) {
+            LANDMARK_COORDS = data.landmarks;
+            // Dynamically reposition SVG landmark nodes
+            const nodeMap = {
+              charging_dock: 'nodeDock',
+              front_door: 'nodeDoor',
+              living_room: 'nodeLiving',
+              kitchen: 'nodeKitchen'
+            };
+            for (const [key, coords] of Object.entries(LANDMARK_COORDS)) {
+              const elId = nodeMap[key];
+              if (elId) {
+                const nodeEl = document.getElementById(elId);
+                if (nodeEl && Array.isArray(coords) && coords.length >= 2) {
+                  // Invert MuJoCo +Y to SVG -Y
+                  nodeEl.setAttribute('transform', `translate(${coords[0]}, ${-coords[1]})`);
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch landmarks from server:', err);
+      }
+    }
+    fetchLandmarks();
 
     function setMapSize(heightPx) {
       const wrapper = document.getElementById('mapWrapper');
@@ -1257,18 +1284,28 @@
         }
       }
 
-      // Update Target Line if navigating to a landmark
+      // Update Target Line if navigating to a landmark (using single source of truth)
       const targetLine = document.getElementById('navTargetLine');
       if (targetLine) {
         const isNavigating = (t.active_action === 'navigate_to_landmark');
         const landmark = details.landmark;
-        if (isNavigating && landmark && LANDMARK_COORDS[landmark]) {
-          const [tgX, tgY] = LANDMARK_COORDS[landmark];
+        let tgX = null, tgY = null;
+
+        if (isNavigating) {
+          // 1. Direct target coordinates from active navigation worker (most authoritative)
+          if (Array.isArray(details.target) && details.target.length >= 2) {
+            [tgX, tgY] = details.target;
+          } else if (landmark && LANDMARK_COORDS[landmark]) {
+            [tgX, tgY] = LANDMARK_COORDS[landmark];
+          }
+        }
+
+        if (tgX !== null && tgY !== null) {
           targetLine.setAttribute('x1', rX);
           targetLine.setAttribute('y1', rY);
           targetLine.setAttribute('x2', tgX);
-          targetLine.setAttribute('y2', -tgY);
-          targetLine.setAttribute('opacity', '0.7');
+          targetLine.setAttribute('y2', -tgY); // Invert MuJoCo +Y to SVG -Y
+          targetLine.setAttribute('opacity', '0.8');
         } else {
           targetLine.setAttribute('opacity', '0');
         }
