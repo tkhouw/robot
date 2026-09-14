@@ -36,9 +36,9 @@ class AgentConfig(BaseSettings):
     # Known Domestic Landmarks (x, y coordinates in meters)
     landmarks: Dict[str, Tuple[float, float]] = {
         "charging_dock": (0.0, 0.0),
-        "front_door": (1.2, 0.0),
-        "living_room": (0.6, 0.5),
-        "kitchen": (0.8, -0.6),
+        "front_door": (2.2, 0.0),
+        "living_room": (1.0, 0.9),
+        "kitchen": (1.2, -0.9),
     }
 
 

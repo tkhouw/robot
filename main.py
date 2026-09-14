@@ -60,26 +60,20 @@ def main():
     )
     motion_sensor.start()
     app.state.motion_sensor = motion_sensor
-    # 4. Optional Native MuJoCo 3D Window
-    import argparse
-    parser = argparse.ArgumentParser(description="WAVEGO Pro Cognitive Agent Gateway")
-    parser.add_argument("--gui", action="store_true", help="Launch native interactive MuJoCo 3D window alongside Web UI")
-    args, _ = parser.parse_known_args()
-
-    # 5. Display service information and usage
+    # 4. Display service information and usage
     print(f"\nModel Backend: {config.model_name}")
-    print(f"Interactive Web Dashboard (Portrait / Landscape): http://{config.host}:{config.port}/")
-    print(f"Event Gateway API: http://{config.host}:{config.port}/events")
-    print(f"Live Video Stream: http://{config.host}:{config.port}/video/stream?cam=tracking_cam")
-    print(f"Live SSE Stream:   http://{config.host}:{config.port}/events/stream")
+    print(f"Interactive Web Dashboard: http://{config.host}:{config.port}/")
+    print(f"Event Gateway API:         http://{config.host}:{config.port}/events")
+    print(f"Live Video Stream:         http://{config.host}:{config.port}/video/stream?cam=tracking_cam")
+    print(f"Live SSE Stream:           http://{config.host}:{config.port}/events/stream")
     print("=" * 65)
 
-    # 6. Serve the FastAPI Gateway & Optional Native 3D Viewer
+    # 5. Serve the FastAPI Gateway & Native 3D Viewer
     # Note: On Linux/X11/Wayland, GLFW requires window creation to occur on the MAIN thread.
     try:
-        if args.gui and hasattr(robot, "launch_viewer"):
+        if hasattr(robot, "launch_viewer"):
             import threading
-            print("Launching native MuJoCo 3D Interactive Window on main thread...")
+            print("\nLaunching native MuJoCo 3D Interactive Window on main thread...")
             server_config = uvicorn.Config(
                 app,
                 host=config.host,
@@ -91,7 +85,7 @@ def main():
             server_thread = threading.Thread(target=server.run, daemon=True, name="UvicornServerThread")
             server_thread.start()
 
-            # Run interactive viewer on the main thread
+            # Run interactive 3D viewer on the main thread
             try:
                 robot.launch_viewer()
             finally:
