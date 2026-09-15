@@ -16,6 +16,50 @@ from app.config import config
 from app.vfh_planner import VFHPlanner
 
 
+class PhysicalStallDetector:
+    """
+    Unified physical stall supervisor for WAVEGO Pro.
+    Tracks ground translation (x, y) when robot is commanded to walk.
+    Triggers a stall if the robot is walking (is_moving and not is_turning_in_place)
+    but fails to translate min_displacement_m over timeout_s.
+    """
+
+    def __init__(self, timeout_s: float = 6.0, min_displacement_m: float = 0.04):
+        self.timeout_s = timeout_s
+        self.min_displacement_m = min_displacement_m
+        self.last_check_time = time.time()
+        self.last_check_pos: Optional[Tuple[float, float]] = None
+
+    def update(self, robot: BaseRobot, curr_pos: Tuple[float, float]) -> Tuple[bool, float]:
+        """
+        Updates the stall supervisor with the latest robot pose.
+        Returns:
+            (is_stalled: bool, disp_since_check: float)
+        """
+        now = time.time()
+        if self.last_check_pos is None:
+            self.last_check_pos = curr_pos
+            self.last_check_time = now
+            return False, 0.0
+
+        is_walking = getattr(robot, "is_moving", False) and not getattr(robot, "is_turning_in_place", False)
+
+        if is_walking:
+            disp = math.hypot(curr_pos[0] - self.last_check_pos[0], curr_pos[1] - self.last_check_pos[1])
+            if disp >= self.min_displacement_m:
+                self.last_check_time = now
+                self.last_check_pos = curr_pos
+                return False, disp
+            elif (now - self.last_check_time) >= self.timeout_s:
+                return True, disp
+            return False, disp
+        else:
+            # Stopped or executing in-place pivot: reset translation window
+            self.last_check_time = now
+            self.last_check_pos = curr_pos
+            return False, 0.0
+
+
 class ActionManager:
     """
     Unified manager for all non-blocking robot actions.
@@ -273,10 +317,8 @@ class ActionManager:
                 t_start = time.time()
                 last_emit = t_start
 
-                # Stall detection for relative walking
-                last_progress_time = time.time()
-                last_traveled = 0.0
-                stall_timeout = 5.0
+                # Physical stall supervision for relative walking
+                stall_detector = PhysicalStallDetector(timeout_s=5.0, min_displacement_m=0.03)
                 stalled = False
 
                 while (time.time() - t_start) < 25.0 and not self._cancel_event.is_set():
@@ -302,10 +344,9 @@ class ActionManager:
                     if traveled >= target_dist:
                         break
 
-                    if traveled > (last_traveled + 0.02):
-                        last_progress_time = now
-                        last_traveled = traveled
-                    elif (now - last_progress_time) >= stall_timeout:
+                    # Check for physical stall
+                    is_stalled, _ = stall_detector.update(robot, (curr_pos[0], curr_pos[1]))
+                    if is_stalled:
                         stalled = True
                         break
 
@@ -408,15 +449,14 @@ class ActionManager:
         measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to WAVEGO trot
 
         initial_dist = self._action_details.get("initial_dist_m", 1.0)
-        last_progress_time = time.time()
-        last_progress_dist = initial_dist
-        stall_timeout = 6.0
-        min_progress_delta = 0.03  # 3 cm threshold
+        stall_detector = PhysicalStallDetector(timeout_s=6.0, min_displacement_m=0.04)
 
-        # Reactive LiDAR obstacle avoidance & detour tracking
+        # Reactive LiDAR obstacle avoidance & goal-progress-gated detour tracking
         is_detouring = False
-        detour_start_time = 0.0
+        detour_stagnant_start_time = 0.0
+        min_goal_dist_achieved = initial_dist
         detour_timeout = getattr(config, "lidar_detour_timeout_s", 15.0)
+        min_goal_progress_delta = 0.04  # 4 cm progress towards landmark resets detour timeout
         obstacle_dist_thresh = getattr(config, "lidar_obstacle_distance_m", 0.45)
         emergency_stop_thresh = getattr(config, "lidar_emergency_stop_m", 0.16)
 
@@ -532,60 +572,62 @@ class ActionManager:
                     heading_err = (target_heading_deg - curr_yaw + 180.0) % 360.0 - 180.0
 
                 # Detour Timeout Management
+                # The clock ticks ONLY when an obstacle is within range AND no forward progress
+                # toward the target landmark has occurred for detour_timeout seconds.
+                # When a new min_goal_dist_achieved is achieved, the clock is RESET!
                 if is_detouring:
-                    if detour_start_time == 0.0:
-                        detour_start_time = now
-                        print(f"\n[VFH OBSTACLE DETOUR] Obstacle ahead. Steering via VFH valley at {chosen_heading:.1f}°...")
+                    if dist < (min_goal_dist_achieved - min_goal_progress_delta):
+                        # Moving closer to goal landmark despite obstacle nearby! Reset timeout clock.
+                        min_goal_dist_achieved = dist
+                        detour_stagnant_start_time = now
+                    else:
+                        if detour_stagnant_start_time == 0.0:
+                            detour_stagnant_start_time = now
+                            print(f"\n[VFH OBSTACLE DETOUR] Obstacle ahead. Steering via VFH valley at {chosen_heading:.1f}° (dist_to_goal={dist:.2f}m)...")
 
-                    detour_elapsed = now - detour_start_time
-                    if detour_elapsed >= detour_timeout:
-                        print(f"\n[VFH DETOUR TIMEOUT] Off-track for {detour_elapsed:.1f}s (> {detour_timeout:.1f}s)! Stopping navigation to wake agent...")
-                        robot.stop()
-                        robot.stand()
-                        self._emit_gateway_event(
-                            "action_stalled",
-                            {
-                                "action": "navigate_to_landmark",
-                                "landmark": landmark_name,
-                                "distance_remaining_m": round(dist, 2),
-                                "current_pos": [round(curr_x, 3), round(curr_y, 3)],
-                                "reason": "detour_timeout_obstacle_blocked",
-                                "detour_duration_s": round(detour_elapsed, 1),
-                                "sectors": lidar_scan.get("sectors", {}) if lidar_scan else {},
-                            },
-                        )
-                        break
-
-                    # Reset stall progress timer during legitimate avoidance manoeuvres
-                    last_progress_time = now
-                    last_progress_dist = dist
+                        detour_stagnant_elapsed = now - detour_stagnant_start_time
+                        if detour_stagnant_elapsed >= detour_timeout:
+                            print(f"\n[VFH DETOUR TIMEOUT] Stagnant near obstacle for {detour_stagnant_elapsed:.1f}s (> {detour_timeout:.1f}s) without goal progress! Stopping navigation to wake agent...")
+                            robot.stop()
+                            robot.stand()
+                            self._emit_gateway_event(
+                                "action_stalled",
+                                {
+                                    "action": "navigate_to_landmark",
+                                    "landmark": landmark_name,
+                                    "distance_remaining_m": round(dist, 2),
+                                    "current_pos": [round(curr_x, 3), round(curr_y, 3)],
+                                    "reason": "detour_timeout_obstacle_blocked",
+                                    "detour_duration_s": round(detour_stagnant_elapsed, 1),
+                                    "sectors": lidar_scan.get("sectors", {}) if lidar_scan else {},
+                                },
+                            )
+                            break
                 else:
-                    if detour_start_time != 0.0:
+                    if detour_stagnant_start_time != 0.0:
                         print(f"\n[VFH CLEAR] Path open! Resuming direct goal heading to '{landmark_name}'.")
-                        detour_start_time = 0.0
+                        detour_stagnant_start_time = 0.0
+                    min_goal_dist_achieved = min(min_goal_dist_achieved, dist)
 
-                    # Standard linear stall detection
-                    if getattr(robot, "is_turning_in_place", False):
-                        last_progress_time = now
-                        last_progress_dist = dist
-                    elif dist < (last_progress_dist - min_progress_delta):
-                        last_progress_time = now
-                        last_progress_dist = dist
-                    elif (now - last_progress_time) >= stall_timeout:
-                        print(f"\n[STALL DETECTED] Robot stalled navigating to '{landmark_name}'! Stopping motors...")
-                        robot.stop()
-                        robot.stand()
-                        self._emit_gateway_event(
-                            "action_stalled",
-                            {
-                                "action": "navigate_to_landmark",
-                                "landmark": landmark_name,
-                                "distance_remaining_m": round(dist, 2),
-                                "current_pos": [round(curr_x, 3), round(curr_y, 3)],
-                                "reason": "movement_deadlock_or_obstacle",
-                            },
-                        )
-                        break
+                # Physical Displacement Stall Detection
+                # Uses unified PhysicalStallDetector to verify continuous ground translation
+                is_stalled, disp_since_check = stall_detector.update(robot, (curr_x, curr_y))
+                if is_stalled:
+                    print(f"\n[PHYSICAL STALL DETECTED] Robot commanded to walk but stationary (disp={disp_since_check*100:.1f}cm in {stall_detector.timeout_s:.1f}s)! Stopping...")
+                    robot.stop()
+                    robot.stand()
+                    self._emit_gateway_event(
+                        "action_stalled",
+                        {
+                            "action": "navigate_to_landmark",
+                            "landmark": landmark_name,
+                            "distance_remaining_m": round(dist, 2),
+                            "current_pos": [round(curr_x, 3), round(curr_y, 3)],
+                            "reason": "movement_deadlock_or_obstacle",
+                            "displacement_m": round(disp_since_check, 3),
+                        },
+                    )
+                    break
 
                 # Continuous VFH-Guided Quadruped Locomotion
                 # Normalize heading error to [-180, 180]
