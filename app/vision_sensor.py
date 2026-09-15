@@ -43,7 +43,7 @@ class PassiveMotionDetector:
         self._thread: Optional[threading.Thread] = None
         self._prev_frame: Optional[np.ndarray] = None
         self._last_alert_time: float = 0.0
-        self._last_moving_time: float = 0.0
+        self._last_moving_time: float = time.time()  # Start with settling delay active from boot
         self._cooldown_seconds: float = 5.0  # Prevent flooding events
 
     def start(self):
