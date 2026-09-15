@@ -233,12 +233,16 @@ async def telemetry_broadcast_loop():
                 motion_sensor = getattr(app.state, "motion_sensor", None)
 
                 lidar_info = None
-                if hasattr(robot, "get_lidar_scan"):
-                    scan = robot.get_lidar_scan(num_samples=36)
+                action_details = action_mgr.action_details or {}
+                if "lidar" in action_details:
+                    lidar_info = action_details["lidar"]
+                elif hasattr(robot, "get_lidar_scan"):
+                    scan = robot.get_lidar_scan(num_samples=72)
                     if scan:
                         lidar_info = {
                             "min_distance_m": scan.get("min_distance_m"),
                             "sectors": scan.get("sectors"),
+                            "is_detouring": False,
                         }
 
                 data = {
@@ -247,7 +251,7 @@ async def telemetry_broadcast_loop():
                     "is_busy": is_agent_busy or action_mgr.is_busy,
                     "active_action": action_mgr.active_action,
                     "action_progress": action_mgr.progress_pct,
-                    "action_details": action_mgr.action_details,
+                    "action_details": action_details,
                     "lidar": lidar_info,
                     "motion_suppressed": getattr(motion_sensor, "suppress_motion_detection", False) if motion_sensor else False,
                 }

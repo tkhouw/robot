@@ -53,7 +53,7 @@ class WavegoSim(BaseRobot):
         self.move_fb = 0.0      # Forward / Backward (-100 to 100)
         self.move_lr = 0.0      # Turn Left / Right (-100 to 100)
         self.walk_cycle = 0.0   # Gait cycle phase [0, 1)
-        self.gait_speed = 2.2   # Gait frequency (cycles/second) - authentic brisk quadruped trot
+        self.gait_speed = 1.5   # Gait frequency (cycles/second) - authentic brisk quadruped trot
         self.stand_h = STAND_HEIGHT
 
         # Actuator mapping (12 serial-bus servo actuators)
@@ -117,9 +117,10 @@ class WavegoSim(BaseRobot):
                 self.walk_cycle = (self.walk_cycle + self.gait_speed * speed_factor * dt) % 1.0
 
                 # Determine turning command (-1: left, 1: right, 0: straight)
-                if self.move_lr > 15.0:
+                # Lower deadband from 15.0 to 5.0 for responsive closed-loop heading and detour corrections
+                if self.move_lr > 5.0:
                     turn_cmd = 1
-                elif self.move_lr < -15.0:
+                elif self.move_lr < -5.0:
                     turn_cmd = -1
                 else:
                     turn_cmd = 0

@@ -13,6 +13,7 @@ import requests
 
 from robot_interface import BaseRobot
 from app.config import config
+from app.vfh_planner import VFHPlanner
 
 
 class ActionManager:
@@ -463,67 +464,82 @@ class ActionManager:
                     )
                     break
 
+                # Closed-loop direct goal heading calculation
+                target_heading_rad = math.atan2(dy, dx)
+                target_heading_deg = math.degrees(target_heading_rad)
+
                 # Query 360 DTOF LiDAR scan
                 lidar_scan = None
                 if hasattr(robot, "get_lidar_scan"):
-                    lidar_scan = robot.get_lidar_scan()
+                    lidar_scan = robot.get_lidar_scan(num_samples=72)
 
-                # Evaluate LiDAR sectors and check forward obstacle clearance
-                front_dist = 12.0
-                fl_dist = 12.0
-                fr_dist = 12.0
-                left_dist = 12.0
-                right_dist = 12.0
-                min_clearance = 12.0
+                # Initialize or reuse VFH Planner
+                if not hasattr(self, "_vfh_planner") or self._vfh_planner is None:
+                    self._vfh_planner = VFHPlanner(
+                        num_bins=72,
+                        safe_distance_m=getattr(config, "lidar_obstacle_distance_m", 0.55),
+                        emergency_stop_m=getattr(config, "lidar_emergency_stop_m", 0.16),
+                        density_threshold_high=0.15,
+                        density_threshold_low=0.08,
+                    )
 
-                if lidar_scan:
-                    sectors = lidar_scan.get("sectors", {})
-                    front_dist = sectors.get("front", 12.0)
-                    fl_dist = sectors.get("front_left", 12.0)
-                    fr_dist = sectors.get("front_right", 12.0)
-                    left_dist = sectors.get("left", 12.0)
-                    right_dist = sectors.get("right", 12.0)
-                    min_clearance = lidar_scan.get("min_distance_m", 12.0)
+                vfh_result = None
+                if lidar_scan and "ranges" in lidar_scan:
+                    vfh_result = self._vfh_planner.compute_steering(
+                        lidar_ranges=lidar_scan["ranges"],
+                        current_yaw_deg=curr_yaw,
+                        target_heading_deg=target_heading_deg,
+                        dist_to_goal=dist,
+                    )
 
-                    # Update action details for real-time telemetry streaming
+                if vfh_result:
+                    is_detouring = vfh_result["is_detouring"]
+                    heading_err = vfh_result["heading_error_deg"]
+                    chosen_heading = vfh_result["chosen_heading_deg"]
+                    min_clearance = vfh_result["min_distance_m"]
+                    polar_density = vfh_result["polar_density"]
+
+                    # Emergency stop condition
+                    if vfh_result.get("emergency_stop", False):
+                        print(f"\n[LIDAR EMERGENCY STOP] Obstacle at {min_clearance:.2f}m! Halting...")
+                        robot.stop()
+                        robot.stand()
+                        self._emit_gateway_event(
+                            "action_stalled",
+                            {
+                                "action": "navigate_to_landmark",
+                                "landmark": landmark_name,
+                                "distance_remaining_m": round(dist, 2),
+                                "current_pos": [round(curr_x, 3), round(curr_y, 3)],
+                                "reason": "lidar_emergency_stop_obstacle_too_close",
+                                "min_clearance_m": min_clearance,
+                                "sectors": lidar_scan.get("sectors", {}) if lidar_scan else {},
+                            },
+                        )
+                        break
+
+                    # Update action details for real-time telemetry streaming (and polar heatmap)
                     self._action_details["lidar"] = {
                         "min_distance_m": min_clearance,
-                        "sectors": sectors,
+                        "sectors": lidar_scan.get("sectors", {}),
                         "is_detouring": is_detouring,
+                        "vfh_polar_density": polar_density,
+                        "chosen_heading_deg": chosen_heading,
+                        "target_heading_deg": round(float(target_heading_deg), 1),
                     }
+                else:
+                    is_detouring = False
+                    heading_err = (target_heading_deg - curr_yaw + 180.0) % 360.0 - 180.0
 
-                # Emergency Hard Stop: If directly up against an obstacle, stop immediately
-                if min_clearance <= emergency_stop_thresh and dist > 0.15:
-                    print(f"\n[LIDAR EMERGENCY STOP] Obstacle at {min_clearance:.2f}m (< {emergency_stop_thresh:.2f}m)! Halting...")
-                    robot.stop()
-                    robot.stand()
-                    self._emit_gateway_event(
-                        "action_stalled",
-                        {
-                            "action": "navigate_to_landmark",
-                            "landmark": landmark_name,
-                            "distance_remaining_m": round(dist, 2),
-                            "current_pos": [round(curr_x, 3), round(curr_y, 3)],
-                            "reason": "lidar_emergency_stop_obstacle_too_close",
-                            "min_clearance_m": min_clearance,
-                            "sectors": sectors if lidar_scan else {},
-                        },
-                    )
-                    break
-
-                # Forward obstacle check: Is direct forward path blocked?
-                forward_blocked = (min(front_dist, fl_dist, fr_dist) < obstacle_dist_thresh) and (dist > 0.25)
-
-                if forward_blocked:
-                    if not is_detouring:
-                        is_detouring = True
+                # Detour Timeout Management
+                if is_detouring:
+                    if detour_start_time == 0.0:
                         detour_start_time = now
-                        print(f"\n[LIDAR OBSTACLE DETECTED] Forward path blocked ({front_dist:.2f}m). Starting detour avoidance...")
+                        print(f"\n[VFH OBSTACLE DETOUR] Obstacle ahead. Steering via VFH valley at {chosen_heading:.1f}°...")
 
-                    # Check Detour Timeout (Configurable: default 15.0s)
                     detour_elapsed = now - detour_start_time
                     if detour_elapsed >= detour_timeout:
-                        print(f"\n[LIDAR DETOUR TIMEOUT] Off-track for {detour_elapsed:.1f}s (> {detour_timeout:.1f}s)! Stopping navigation to wake agent...")
+                        print(f"\n[VFH DETOUR TIMEOUT] Off-track for {detour_elapsed:.1f}s (> {detour_timeout:.1f}s)! Stopping navigation to wake agent...")
                         robot.stop()
                         robot.stand()
                         self._emit_gateway_event(
@@ -535,32 +551,20 @@ class ActionManager:
                                 "current_pos": [round(curr_x, 3), round(curr_y, 3)],
                                 "reason": "detour_timeout_obstacle_blocked",
                                 "detour_duration_s": round(detour_elapsed, 1),
-                                "sectors": sectors if lidar_scan else {},
+                                "sectors": lidar_scan.get("sectors", {}) if lidar_scan else {},
                             },
                         )
                         break
 
-                    # Detour active: Pause standard displacement stall timer so circumvention isn't aborted
+                    # Reset stall progress timer during legitimate avoidance manoeuvres
                     last_progress_time = now
                     last_progress_dist = dist
-
-                    # Reactive VFH-Lite Steering: choose lateral gap with greater clearance
-                    # In Waveshare kinematics: move_lr < 0 turns Left, move_lr > 0 turns Right
-                    if left_dist >= right_dist:
-                        # Turn and step left
-                        robot.walk(fb=25.0, lr=-35.0)
-                    else:
-                        # Turn and step right
-                        robot.walk(fb=25.0, lr=35.0)
-
                 else:
-                    # Forward path clear
-                    if is_detouring:
-                        print(f"\n[LIDAR OBSTACLE CLEARED] Direct line of sight restored! Resuming direct navigation.")
-                        is_detouring = False
+                    if detour_start_time != 0.0:
+                        print(f"\n[VFH CLEAR] Path open! Resuming direct goal heading to '{landmark_name}'.")
+                        detour_start_time = 0.0
 
-                    # Stall Check: Detect if robot is physically stuck against an obstacle
-                    # Never trigger stalls while robot is executing an in-place turn
+                    # Standard linear stall detection
                     if getattr(robot, "is_turning_in_place", False):
                         last_progress_time = now
                         last_progress_dist = dist
@@ -583,25 +587,26 @@ class ActionManager:
                         )
                         break
 
-                    # Closed-loop heading calculation towards goal
-                    target_heading_rad = math.atan2(dy, dx)
-                    target_heading_deg = math.degrees(target_heading_rad)
+                # Continuous VFH-Guided Quadruped Locomotion
+                # Normalize heading error to [-180, 180]
+                while heading_err > 180.0:
+                    heading_err -= 360.0
+                while heading_err < -180.0:
+                    heading_err += 360.0
 
-                    heading_err = target_heading_deg - curr_yaw
-                    while heading_err > 180.0:
-                        heading_err -= 360.0
-                    while heading_err < -180.0:
-                        heading_err += 360.0
+                # When detouring around an obstacle, commit to turning in place if error exceeds 15 deg
+                turn_in_place_thresh = 15.0 if is_detouring else 30.0
 
-                    # Steering vs Straight Walking logic
-                    if abs(heading_err) > 30.0 and dist > 0.20:
-                        # Large heading error: turn in place first
-                        turn_cmd = -35.0 if heading_err > 0 else 35.0
-                        robot.walk(fb=0.0, lr=turn_cmd)
-                    else:
-                        # Forward with smooth proportional heading correction
-                        lr_correction = max(-25.0, min(25.0, -heading_err * 1.5))
-                        robot.walk(fb=75.0, lr=lr_correction)
+                if abs(heading_err) > turn_in_place_thresh and dist > 0.20:
+                    # Deflection needed: turn in place to align with clear valley
+                    turn_cmd = -40.0 if heading_err > 0 else 40.0
+                    robot.walk(fb=0.0, lr=turn_cmd)
+                else:
+                    # Forward locomotion with active proportional steering
+                    # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
+                    lr_correction = max(-35.0, min(35.0, -heading_err * 2.0))
+                    forward_speed = 75.0 if not is_detouring else 50.0
+                    robot.walk(fb=forward_speed, lr=lr_correction)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
                 if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):

@@ -44,7 +44,7 @@ class AgentConfig(BaseSettings):
     # 360 DTOF LiDAR & Obstacle Avoidance Settings
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0
-    lidar_obstacle_distance_m: float = 0.30  # Distance threshold to initiate detour circumvention
+    lidar_obstacle_distance_m: float = 1.00  # Distance threshold to initiate detour circumvention
     lidar_emergency_stop_m: float = 0.10     # Hard collision stop buffer
     lidar_detour_timeout_s: float = 15.0     # Time off-track navigating around obstacle before waking agent
 

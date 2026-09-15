@@ -133,6 +133,73 @@
     .telem-card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; }
     .telem-card .val { font-size: 0.95rem; font-weight: 600; color: #f0f6fc; margin-top: 2px; }
 
+    /* VFH Polar Heatmap Panel */
+    .vfh-panel {
+      padding: 10px 14px;
+      background: #090d13;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .vfh-info {
+      flex: 1;
+      min-width: 200px;
+    }
+    .vfh-info h4 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #f0f6fc;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .vfh-info p {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      line-height: 1.3;
+      margin: 0;
+    }
+    .vfh-legend {
+      display: flex;
+      gap: 10px;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+    .vfh-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .vfh-canvas-wrapper {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #vfhCanvas {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .vfh-center-icon {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      pointer-events: none;
+      transition: transform 0.1s ease;
+    }
+
     .map-container {
       padding: 12px;
       display: flex;
@@ -633,6 +700,36 @@
         <div class="telem-card">
           <div class="label">Motion Guard</div>
           <div class="val" id="telemMotion">Active</div>
+        </div>
+      </div>
+
+      <!-- VFH Obstacle Density Polar Heatmap Widget -->
+      <div class="vfh-panel">
+        <div class="vfh-info">
+          <h4>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 12l7-7"/></svg>
+            VFH Polar Obstacle Radar
+          </h4>
+          <p id="vfhStatusText">Continuous 360° obstacle density map & valley steering selector.</p>
+          <div class="vfh-legend">
+            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#238636;"></span> Clear Valley</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d29922;"></span> Caution</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f85149;"></span> Blocked</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:2px;background:#58a6ff;"></span> Goal</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:2px;background:#3fb950;"></span> VFH Steering</span>
+          </div>
+        </div>
+        <div class="vfh-canvas-wrapper">
+          <canvas id="vfhCanvas" width="280" height="280"></canvas>
+          <!-- Center Robot Quadruped Silhouette Icon -->
+          <svg class="vfh-center-icon" id="vfhRobotIcon" viewBox="0 0 24 24" fill="none" stroke="#f0f6fc" stroke-width="2">
+            <rect x="7" y="5" width="10" height="14" rx="3" fill="#21262d" stroke="#58a6ff"/>
+            <circle cx="12" cy="7" r="1.5" fill="#f85149"/>
+            <line x1="5" y1="6" x2="7" y2="8" stroke="#58a6ff" stroke-width="2"/>
+            <line x1="19" y1="6" x2="17" y2="8" stroke="#58a6ff" stroke-width="2"/>
+            <line x1="5" y1="18" x2="7" y2="16" stroke="#58a6ff" stroke-width="2"/>
+            <line x1="19" y1="18" x2="17" y2="16" stroke="#58a6ff" stroke-width="2"/>
+          </svg>
         </div>
       </div>
 
@@ -1329,6 +1426,143 @@
         } else {
           targetLine.setAttribute('opacity', '0');
         }
+      }
+
+      // Render VFH Polar Obstacle Heatmap Radar
+      renderVfhRadar(t);
+    }
+
+    // Function to render the 360° Polar Vector Field Histogram (VFH) Radar
+    function renderVfhRadar(t) {
+      const canvas = document.getElementById('vfhCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      const cx = width / 2;
+      const cy = height / 2;
+      const maxRadius = width / 2 - 8;
+      const innerRadius = 24;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw background concentric range rings
+      ctx.strokeStyle = '#21262d';
+      ctx.lineWidth = 1;
+      for (const rFrac of [0.35, 0.65, 1.0]) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, innerRadius + (maxRadius - innerRadius) * rFrac, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Crosshairs
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - maxRadius); ctx.lineTo(cx, cy + maxRadius);
+      ctx.moveTo(cx - maxRadius, cy); ctx.lineTo(cx + maxRadius, cy);
+      ctx.stroke();
+
+      const lidar = t.lidar || {};
+      const densities = lidar.vfh_polar_density;
+      const isDetour = lidar.is_detouring;
+      const robotYaw = t.yaw || 0.0; // Body yaw in degrees
+
+      // Update Center Robot Icon rotation (points forward = up in radar)
+      const robotIcon = document.getElementById('vfhRobotIcon');
+      if (robotIcon) {
+        robotIcon.style.transform = `rotate(0deg)`; // Robot is always facing UP in ego-radar
+      }
+
+      // Update status text
+      const statusText = document.getElementById('vfhStatusText');
+      if (statusText) {
+        if (isDetour) {
+          statusText.innerHTML = `<span style="color:var(--accent-orange, #d29922);font-weight:600;">ACTIVE DETOUR:</span> Circumventing obstacle via clear VFH valley...`;
+        } else if (lidar.min_distance_m !== undefined && lidar.min_distance_m < 0.55) {
+          statusText.innerHTML = `<span style="color:var(--accent-blue, #58a6ff);">CAUTION:</span> Object nearby (${lidar.min_distance_m.toFixed(2)}m), direct goal path open.`;
+        } else {
+          statusText.textContent = `Path all-clear. 360° LiDAR scanning actively.`;
+        }
+      }
+
+      if (Array.isArray(densities) && densities.length > 0) {
+        const numBins = densities.length;
+        const angleStep = (Math.PI * 2) / numBins;
+
+        // Bins sweep from -180 to +180 deg in robot body frame (-180 rear, -90 right, 0 front, +90 left)
+        // In Canvas 2D: Up is -PI/2, Right is 0, Down is +PI/2, Left is PI.
+        // To map robot angle (+deg is Left/CCW, -deg is Right/CW) to Canvas screen coordinates:
+        // drawAngle = -Math.PI / 2 - relAngle
+        for (let i = 0; i < numBins; i++) {
+          const density = Math.max(0, Math.min(1.0, densities[i]));
+          const relAngle = -Math.PI + (i + 0.5) * angleStep;
+          const drawAngle = -Math.PI / 2 - relAngle;
+
+          // Heatmap Color: Green (0.0) -> Yellow (0.25) -> Red (1.0)
+          let color = '#238636'; // Green
+          if (density > 0.40) {
+            color = `rgba(248, 81, 73, ${Math.min(1.0, 0.4 + density * 0.6)})`; // Red
+          } else if (density > 0.12) {
+            color = `rgba(210, 153, 34, ${Math.min(1.0, 0.3 + density * 0.7)})`; // Orange/Yellow
+          } else {
+            color = `rgba(35, 134, 54, ${0.15 + (1.0 - density) * 0.25})`; // Soft green valley
+          }
+
+          const binOuterR = innerRadius + (maxRadius - innerRadius) * (0.35 + density * 0.65);
+
+          ctx.beginPath();
+          // Arc from drawAngle - halfStep to drawAngle + halfStep
+          ctx.arc(cx, cy, innerRadius, drawAngle - angleStep / 2, drawAngle + angleStep / 2);
+          ctx.arc(cx, cy, binOuterR, drawAngle + angleStep / 2, drawAngle - angleStep / 2, true);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      }
+
+      // Draw Goal Direction Vector (Cyan Ray)
+      if (lidar.target_heading_deg !== undefined) {
+        const goalRelDeg = lidar.target_heading_deg - robotYaw;
+        const goalAngleRad = (-90 - goalRelDeg) * (Math.PI / 180);
+        const gx = cx + Math.cos(goalAngleRad) * (maxRadius - 4);
+        const gy = cy + Math.sin(goalAngleRad) * (maxRadius - 4);
+
+        ctx.strokeStyle = '#58a6ff';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(gx, gy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Small goal arrow/dot
+        ctx.fillStyle = '#58a6ff';
+        ctx.beginPath();
+        ctx.arc(gx, gy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw VFH Selected Steering Vector (Bright Green Solid Arrow)
+      if (lidar.chosen_heading_deg !== undefined) {
+        const chosenRelDeg = lidar.chosen_heading_deg - robotYaw;
+        const chosenAngleRad = (-90 - chosenRelDeg) * (Math.PI / 180);
+        const vx = cx + Math.cos(chosenAngleRad) * (maxRadius + 2);
+        const vy = cy + Math.sin(chosenAngleRad) * (maxRadius + 2);
+
+        ctx.strokeStyle = '#3fb950';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(vx, vy);
+        ctx.stroke();
+
+        // Arrow tip
+        ctx.fillStyle = '#3fb950';
+        ctx.beginPath();
+        ctx.arc(vx, vy, 5, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
