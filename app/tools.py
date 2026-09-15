@@ -7,6 +7,7 @@ import math
 import time
 from typing import Any, Dict, Optional
 from google.genai import types as genai_types
+from google.adk.tools import ToolContext
 from robot_interface import BaseRobot
 from app.config import config
 
@@ -128,29 +129,37 @@ def get_action_manager() -> ActionManager:
 # Individual Locomotion Tools
 # ---------------------------------------------------------------------------
 
-def walk_forward(distance_meters: float = 0.2) -> str:
+def walk_forward(distance_meters: float = 0.2, tool_context: Optional[ToolContext] = None) -> str:
     """Walk forward by a specified distance in meters."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
     dist = abs(distance_meters)
     get_action_manager().start_relative_motion("walk_forward", distance_meters=dist)
     return f"Initiated walk_forward ({dist:.2f}m)."
 
 
-def walk_backward(distance_meters: float = 0.2) -> str:
+def walk_backward(distance_meters: float = 0.2, tool_context: Optional[ToolContext] = None) -> str:
     """Walk backward by a specified distance in meters."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
     dist = abs(distance_meters)
     get_action_manager().start_relative_motion("walk_backward", distance_meters=-dist)
     return f"Initiated walk_backward ({dist:.2f}m)."
 
 
-def turn_left(degrees: float = 90.0) -> str:
+def turn_left(degrees: float = 90.0, tool_context: Optional[ToolContext] = None) -> str:
     """Rotate body counter-clockwise (to the left) by a given number of degrees."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
     deg = abs(degrees)
     get_action_manager().start_relative_motion("turn_left", turn_degrees=-deg)
     return f"Initiated turn_left ({deg:.1f}°)."
 
 
-def turn_right(degrees: float = 90.0) -> str:
+def turn_right(degrees: float = 90.0, tool_context: Optional[ToolContext] = None) -> str:
     """Rotate body clockwise (to the right) by a given number of degrees."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
     deg = abs(degrees)
     get_action_manager().start_relative_motion("turn_right", turn_degrees=deg)
     return f"Initiated turn_right ({deg:.1f}°)."
@@ -160,11 +169,14 @@ def turn_right(degrees: float = 90.0) -> str:
 # High-Level Navigation & Docking Tools
 # ---------------------------------------------------------------------------
 
-def navigate_to_landmark(landmark_name: str) -> str:
+def navigate_to_landmark(landmark_name: str, tool_context: Optional[ToolContext] = None) -> str:
     """
     Begin autonomous navigation to a domestic landmark.
     Supported landmarks: 'front_door', 'charging_dock', 'living_room', 'kitchen'.
     """
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
     landmark_key = landmark_name.strip().lower().replace(" ", "_")
     if landmark_key not in config.landmarks:
         valid_keys = ", ".join(config.landmarks.keys())
@@ -183,8 +195,11 @@ def navigate_to_landmark(landmark_name: str) -> str:
     )
 
 
-def stop_action() -> str:
+def stop_action(tool_context: Optional[ToolContext] = None) -> str:
     """Immediately halt the robot and cancel any active movement, navigation, or gesture."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
     mgr = get_action_manager()
     res = mgr.cancel_action()
     if res.get("status") == "idle":
@@ -192,8 +207,11 @@ def stop_action() -> str:
     return f"Emergency stop executed: '{res.get('action')}' cancelled. Robot brought to a safe stand."
 
 
-def return_to_charging_dock() -> str:
+def return_to_charging_dock(tool_context: Optional[ToolContext] = None) -> str:
     """Autonomously navigate to the home charging dock and lower onto charging contacts."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
     robot = get_robot()
     mgr = get_action_manager()
 
@@ -247,8 +265,11 @@ def capture_camera_image() -> Dict[str, Any]:
         }
 
 
-def perform_handshake() -> str:
+def perform_handshake(tool_context: Optional[ToolContext] = None) -> str:
     """Performs the official Waveshare paw wave / handshake gesture."""
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
     robot = get_robot()
     get_action_manager().start_gesture("handshake", robot.handshake)
     return "Initiated handshake paw gesture."
