@@ -127,14 +127,25 @@ class VFHPlanner:
         goal_bin_idx = int(np.argmin(np.abs((rel_angles_deg - goal_diff + 180.0) % 360.0 - 180.0)))
 
         # 4. Check if the direct line to goal is unobstructed
-        # Direct path check covers bins within +/- 20 degrees of goal direction
-        half_window = max(2, int(20.0 / self.bin_width_deg))
+        # Direct path check covers bins within +/- 35 degrees of goal direction (wider corridor)
+        half_window = max(3, int(35.0 / self.bin_width_deg))
         direct_blocked = False
         for offset in range(-half_window, half_window + 1):
             idx = (goal_bin_idx + offset) % n
             if smoothed_density[idx] > self.tau_high:
                 direct_blocked = True
                 break
+
+        # Flank Clearance Guard: Even if direct path ahead is clear, check if turning toward
+        # the goal would scrape the robot's flanks against a nearby corner (< 0.32m clearance)
+        if not direct_blocked:
+            turn_direction_sign = 1 if goal_diff > 0 else -1  # +1: goal is Left, -1: goal is Right
+            flank_bins = max(2, int(90.0 / self.bin_width_deg))
+            for offset in range(1, flank_bins + 1):
+                f_idx = (goal_bin_idx - turn_direction_sign * offset) % n
+                if ranges_arr[f_idx] < 0.32:
+                    direct_blocked = True
+                    break
 
         if not direct_blocked:
             # Direct path is open! Head directly to goal.
@@ -182,7 +193,7 @@ class VFHPlanner:
         # Authentic VFH algorithm:
         # - Wide valley: candidates are border + s_max (safety clearance)
         # - Narrow valley: candidate is valley center
-        s_max_bins = max(3, int(25.0 / self.bin_width_deg))  # 25 deg obstacle clearance margin
+        s_max_bins = max(4, int(35.0 / self.bin_width_deg))  # 35 deg obstacle clearance margin (wider berth)
         candidate_headings_world = []
 
         for v_start, v_end in valleys:
