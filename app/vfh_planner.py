@@ -150,55 +150,102 @@ class VFHPlanner:
                 "min_distance_m": round(min_dist, 2),
             }
 
-        # 5. Direct path is blocked -> Enter Detour Mode & evaluate candidate valleys
+        # 5. Direct path is blocked -> Enter Detour Mode & extract candidate valleys
         self.is_detouring = True
 
-        # Identify candidate open valleys (density < tau_low)
-        candidate_indices = []
+        # Group contiguous clear bins (density <= tau_low) into discrete open valleys
+        # A bin is clear if smoothed_density <= tau_low
+        is_clear = (smoothed_density <= self.tau_low)
+
+        valleys = []
+        in_valley = False
+        v_start = 0
+
+        # Handle circular wrap-around by finding transitions
         for i in range(n):
-            if smoothed_density[i] <= self.tau_low:
-                # Prefer forward/side sectors over complete reversal
-                rel_deg = abs(rel_angles_deg[i])
-                if rel_deg <= 135.0:  # Allow up to 135 deg deflection
-                    candidate_indices.append(i)
+            if is_clear[i] and not in_valley:
+                in_valley = True
+                v_start = i
+            elif not is_clear[i] and in_valley:
+                in_valley = False
+                valleys.append((v_start, i - 1))
 
-        # Fallback if all standard valleys are blocked: pick the minimum density bin
-        if not candidate_indices:
-            candidate_indices = [int(np.argmin(smoothed_density))]
+        if in_valley:
+            # Check if wraps around index 0
+            if valleys and valleys[0][0] == 0:
+                first_start, first_end = valleys.pop(0)
+                valleys.append((v_start, first_end + n))
+            else:
+                valleys.append((v_start, n - 1))
 
-        # 6. Cost function evaluation across candidate valleys (Anti-Oscillation)
-        best_idx = candidate_indices[0]
+        # Generate candidate steering directions from each open valley
+        # Authentic VFH algorithm:
+        # - Wide valley: candidates are border + s_max (safety clearance)
+        # - Narrow valley: candidate is valley center
+        s_max_bins = max(3, int(25.0 / self.bin_width_deg))  # 25 deg obstacle clearance margin
+        candidate_headings_world = []
+
+        for v_start, v_end in valleys:
+            v_width = v_end - v_start + 1
+            if v_width >= (2 * s_max_bins):
+                # Wide valley: safe directions near both boundaries + goal if inside
+                c1_idx = (v_start + s_max_bins) % n
+                c2_idx = (v_end - s_max_bins) % n
+                c1_deg = world_bin_angles_deg[c1_idx]
+                c2_deg = world_bin_angles_deg[c2_idx]
+
+                # Check deflection relative to current body (ignore rear > 135 deg)
+                if abs(rel_angles_deg[c1_idx]) <= 135.0:
+                    candidate_headings_world.append(c1_deg)
+                if abs(rel_angles_deg[c2_idx]) <= 135.0:
+                    candidate_headings_world.append(c2_deg)
+
+                # If goal direction falls inside this wide valley safely, add goal heading
+                goal_in_valley = False
+                diff_to_start = (goal_bin_idx - v_start) % n
+                diff_to_end = (v_end - goal_bin_idx) % n
+                if (diff_to_start + diff_to_end) == (v_width - 1):
+                    if diff_to_start >= s_max_bins and diff_to_end >= s_max_bins:
+                        candidate_headings_world.append(target_heading_deg)
+            else:
+                # Narrow valley: steer through the center
+                mid_idx = (v_start + v_width // 2) % n
+                if abs(rel_angles_deg[mid_idx]) <= 135.0:
+                    candidate_headings_world.append(world_bin_angles_deg[mid_idx])
+
+        # Fallback if no valid valley: pick the bin of lowest density
+        if not candidate_headings_world:
+            min_idx = int(np.argmin(smoothed_density))
+            candidate_headings_world = [world_bin_angles_deg[min_idx]]
+
+        # 6. Cost function evaluation across candidate valley directions
+        best_heading = candidate_headings_world[0]
         best_cost = float("inf")
         prev_heading = self.last_selected_heading_deg if self.last_selected_heading_deg is not None else current_yaw_deg
 
-        for idx in candidate_indices:
-            cand_world_deg = world_bin_angles_deg[idx]
-
+        for cand_deg in candidate_headings_world:
             # Angular difference to goal
-            diff_goal = abs((cand_world_deg - target_heading_deg + 180.0) % 360.0 - 180.0)
+            diff_goal = abs((cand_deg - target_heading_deg + 180.0) % 360.0 - 180.0)
             # Angular difference to current robot heading
-            diff_curr = abs((cand_world_deg - current_yaw_deg + 180.0) % 360.0 - 180.0)
+            diff_curr = abs((cand_deg - current_yaw_deg + 180.0) % 360.0 - 180.0)
             # Angular difference to previously chosen heading (MOMENTUM / HYSTERESIS DAMPING)
-            diff_prev = abs((cand_world_deg - prev_heading + 180.0) % 360.0 - 180.0)
+            diff_prev = abs((cand_deg - prev_heading + 180.0) % 360.0 - 180.0)
 
             cost = (
                 self.weight_goal * diff_goal
                 + self.weight_current_heading * diff_curr
                 + self.weight_prev_steering * diff_prev
-                + (smoothed_density[idx] * 50.0)  # penalize remaining density
             )
 
             if cost < best_cost:
                 best_cost = cost
-                best_idx = idx
+                best_heading = cand_deg
 
-        chosen_world_heading = world_bin_angles_deg[best_idx]
-        self.last_selected_heading_deg = chosen_world_heading
-
-        heading_err = (chosen_world_heading - current_yaw_deg + 180.0) % 360.0 - 180.0
+        self.last_selected_heading_deg = best_heading
+        heading_err = (best_heading - current_yaw_deg + 180.0) % 360.0 - 180.0
 
         return {
-            "chosen_heading_deg": round(float(chosen_world_heading), 1),
+            "chosen_heading_deg": round(float(best_heading), 1),
             "heading_error_deg": round(float(heading_err), 1),
             "is_detouring": True,
             "emergency_stop": False,

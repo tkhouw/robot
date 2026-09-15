@@ -318,7 +318,7 @@ class ActionManager:
                 last_emit = t_start
 
                 # Physical stall supervision for relative walking
-                stall_detector = PhysicalStallDetector(timeout_s=5.0, min_displacement_m=0.03)
+                stall_detector = PhysicalStallDetector(timeout_s=50.0, min_displacement_m=0.03)
                 stalled = False
 
                 while (time.time() - t_start) < 25.0 and not self._cancel_event.is_set():
@@ -449,7 +449,7 @@ class ActionManager:
         measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to WAVEGO trot
 
         initial_dist = self._action_details.get("initial_dist_m", 1.0)
-        stall_detector = PhysicalStallDetector(timeout_s=6.0, min_displacement_m=0.04)
+        stall_detector = PhysicalStallDetector(timeout_s=60.0, min_displacement_m=0.04)
 
         # Reactive LiDAR obstacle avoidance & goal-progress-gated detour tracking
         is_detouring = False
@@ -565,6 +565,7 @@ class ActionManager:
                         "is_detouring": is_detouring,
                         "vfh_polar_density": polar_density,
                         "chosen_heading_deg": chosen_heading,
+                        "heading_error_deg": heading_err,
                         "target_heading_deg": round(float(target_heading_deg), 1),
                     }
                 else:
@@ -636,18 +637,20 @@ class ActionManager:
                 while heading_err < -180.0:
                     heading_err += 360.0
 
-                # When detouring around an obstacle, commit to turning in place if error exceeds 15 deg
-                turn_in_place_thresh = 15.0 if is_detouring else 30.0
+                # Dynamic Locomotion: In-place alignment vs. Curvy Trotting
+                # When detouring, allow curvy trotting up to 30 deg heading error
+                # Only use in-place pivot for sharp deflections (> 30 deg)
+                turn_in_place_thresh = 30.0
 
                 if abs(heading_err) > turn_in_place_thresh and dist > 0.20:
-                    # Deflection needed: turn in place to align with clear valley
+                    # Sharp deflection: pivot in place to face open corridor
                     turn_cmd = -40.0 if heading_err > 0 else 40.0
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
-                    # Forward locomotion with active proportional steering
+                    # Curvy trotting: forward trot + lateral turning arc
                     # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
-                    lr_correction = max(-35.0, min(35.0, -heading_err * 2.0))
-                    forward_speed = 75.0 if not is_detouring else 50.0
+                    lr_correction = max(-40.0, min(40.0, -heading_err * 2.5))
+                    forward_speed = 75.0 if not is_detouring else 45.0
                     robot.walk(fb=forward_speed, lr=lr_correction)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
