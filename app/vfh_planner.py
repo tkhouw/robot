@@ -24,6 +24,7 @@ class VFHPlanner:
         weight_goal: float = 2.0,
         weight_current_heading: float = 0.5,
         weight_prev_steering: float = 3.0,
+        robot_radius_m: float = 0.18,
     ):
         self.num_bins = num_bins
         self.bin_width_deg = 360.0 / num_bins
@@ -31,6 +32,7 @@ class VFHPlanner:
         self.emergency_stop_m = emergency_stop_m
         self.tau_high = density_threshold_high
         self.tau_low = density_threshold_low
+        self.robot_radius_m = robot_radius_m
 
         # Cost function weights (anti-oscillation tuning)
         self.weight_goal = weight_goal
@@ -100,15 +102,28 @@ class VFHPlanner:
                 "min_distance_m": min_dist,
             }
 
-        # 1. Calculate raw obstacle density per bin (in robot relative frame: -180 to +180)
-        # Closer obstacles produce quadratic certainty values up to 1.0
+        # 1. Calculate raw obstacle density per bin with physical robot footprint enlargement
+        # Each obstacle at distance d is enlarged by angular margin gamma = arcsin(r_robot / d)
+        # This prevents corners from scraping against the shoulders or rear legs
         raw_density = np.zeros(n, dtype=np.float64)
         for i in range(n):
             d = ranges_arr[i]
-            if d < self.safe_distance_m:
-                raw_density[i] = ((self.safe_distance_m - d) / self.safe_distance_m) ** 2
-            else:
-                raw_density[i] = 0.0
+            if d < self.safe_distance_m and d > 0.01:
+                certainty = ((self.safe_distance_m - d) / self.safe_distance_m) ** 2
+                raw_density[i] = max(raw_density[i], certainty)
+
+                # Angular enlargement for physical body clearance
+                sin_gamma = min(1.0, self.robot_radius_m / max(d, self.robot_radius_m))
+                gamma_deg = math.degrees(math.asin(sin_gamma))
+                enlarge_bins = int(math.ceil(gamma_deg / self.bin_width_deg))
+
+                for offset in range(1, enlarge_bins + 1):
+                    left_idx = (i - offset) % n
+                    right_idx = (i + offset) % n
+                    # Taper density across enlarged radius
+                    enlarge_certainty = certainty * (1.0 - 0.3 * (offset / (enlarge_bins + 1)))
+                    raw_density[left_idx] = max(raw_density[left_idx], enlarge_certainty)
+                    raw_density[right_idx] = max(raw_density[right_idx], enlarge_certainty)
 
         # 2. Circular periodic convolution for Gaussian smoothing (takes robot width into account)
         k_len = len(self.kernel)
@@ -136,16 +151,29 @@ class VFHPlanner:
                 direct_blocked = True
                 break
 
-        # Flank Clearance Guard: Even if direct path ahead is clear, check if turning toward
-        # the goal would scrape the robot's flanks against a nearby corner (< 0.32m clearance)
+        # Unified Flank Clearance Guard (Body-Frame):
+        # The robot's physical flanks are located at relative angles:
+        # Left Flank: [+40°, +120°], Right Flank: [-120°, -40°]
+        # If an obstacle encroaches within 0.32m of either flank, turning toward that side
+        # would sweep the robot's rear legs/hips into the corner.
+        flank_min_clearance_m = 0.32
+        left_flank_min = float("inf")
+        right_flank_min = float("inf")
+
+        for i in range(n):
+            rel_ang = rel_angles_deg[i]
+            d = ranges_arr[i]
+            if 40.0 <= rel_ang <= 120.0:
+                left_flank_min = min(left_flank_min, d)
+            elif -120.0 <= rel_ang <= -40.0:
+                right_flank_min = min(right_flank_min, d)
+
+        # If direct path is otherwise clear, check if turning toward the goal would scrape an encroaching flank:
         if not direct_blocked:
-            turn_direction_sign = 1 if goal_diff > 0 else -1  # +1: goal is Left, -1: goal is Right
-            flank_bins = max(2, int(90.0 / self.bin_width_deg))
-            for offset in range(1, flank_bins + 1):
-                f_idx = (goal_bin_idx - turn_direction_sign * offset) % n
-                if ranges_arr[f_idx] < 0.32:
-                    direct_blocked = True
-                    break
+            if goal_diff > 5.0 and left_flank_min < flank_min_clearance_m:
+                direct_blocked = True  # Turning left would swing right rear into obstacle
+            elif goal_diff < -5.0 and right_flank_min < flank_min_clearance_m:
+                direct_blocked = True  # Turning right would swing left rear into obstacle
 
         if not direct_blocked:
             # Direct path is open! Head directly to goal.

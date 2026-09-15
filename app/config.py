@@ -61,7 +61,7 @@ class AgentConfig(BaseSettings):
     nav_detour_speed: float = 70.0
 
     # nav_turn_speed: In-place turning LR speed. Tested safe range: [20.0, 60.0].
-    nav_turn_speed: float = 45.0
+    nav_turn_speed: float = 25.0
 
     # sim_time_warp: Wall-clock simulation speed multiplier. Tested range: [0.5, 3.0].
     # 1.0 = true real-time, 1.5 = 1.5x real-time speed.
@@ -70,7 +70,7 @@ class AgentConfig(BaseSettings):
     # 360 DTOF LiDAR & Obstacle Avoidance Settings
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0
-    lidar_obstacle_distance_m: float = 1.00  # Distance threshold to initiate detour circumvention
+    lidar_obstacle_distance_m: float = 0.60  # Distance threshold to initiate detour circumvention
     lidar_emergency_stop_m: float = 0.10     # Hard collision stop buffer
     lidar_detour_timeout_s: float = 150.0     # Time off-track navigating around obstacle before waking agent
 

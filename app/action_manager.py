@@ -517,10 +517,11 @@ class ActionManager:
                 if not hasattr(self, "_vfh_planner") or self._vfh_planner is None:
                     self._vfh_planner = VFHPlanner(
                         num_bins=72,
-                        safe_distance_m=getattr(config, "lidar_obstacle_distance_m", 0.55),
+                        safe_distance_m=getattr(config, "lidar_obstacle_distance_m", 1.00),
                         emergency_stop_m=getattr(config, "lidar_emergency_stop_m", 0.16),
                         density_threshold_high=0.15,
                         density_threshold_low=0.08,
+                        robot_radius_m=0.18,
                     )
 
                 vfh_result = None
