@@ -60,6 +60,10 @@
       <camera name="tracking_cam" pos="0 0 0.90" fovy="45" xyaxes="0 -1 0 1 0 0"/>
       <!-- Physical front bumper to prevent camera from entering obstacle volumes on collision -->
       <geom name="front_bumper" type="capsule" fromto="0.065 -0.035 0.015 0.065 0.035 0.015" size="0.012" mass="0.02" material="chassis"/>
+      <!-- Waveshare LD19 DTOF 360 LiDAR Turret on top plate -->
+      <geom name="lidar_mount" type="cylinder" size="0.023 0.005" pos="0 0 0.032" mass="0.015" material="servo_case"/>
+      <geom name="lidar_puck" type="cylinder" size="0.020 0.012" pos="0 0 0.045" mass="0.032" material="chassis"/>
+      <site name="lidar" pos="0 0 0.050"/>
 
       <!-- ==================== FRONT LEFT (LF) ==================== -->
       <body name="FL_hip" pos="0.0493 0.0285 0.006">

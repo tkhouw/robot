@@ -232,6 +232,15 @@ async def telemetry_broadcast_loop():
                 action_mgr = get_action_manager()
                 motion_sensor = getattr(app.state, "motion_sensor", None)
 
+                lidar_info = None
+                if hasattr(robot, "get_lidar_scan"):
+                    scan = robot.get_lidar_scan(num_samples=36)
+                    if scan:
+                        lidar_info = {
+                            "min_distance_m": scan.get("min_distance_m"),
+                            "sectors": scan.get("sectors"),
+                        }
+
                 data = {
                     "pos": [round(float(pos[0]), 3), round(float(pos[1]), 3), round(float(pos[2]), 3)],
                     "yaw": round(float(rpy[2]), 1),
@@ -239,6 +248,7 @@ async def telemetry_broadcast_loop():
                     "active_action": action_mgr.active_action,
                     "action_progress": action_mgr.progress_pct,
                     "action_details": action_mgr.action_details,
+                    "lidar": lidar_info,
                     "motion_suppressed": getattr(motion_sensor, "suppress_motion_detection", False) if motion_sensor else False,
                 }
                 await broadcast_sse("telemetry", data)

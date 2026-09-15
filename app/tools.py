@@ -298,3 +298,25 @@ def read_telemetry() -> Dict[str, Any]:
         "quaternion_wxyz": [round(float(v), 4) for v in quat],
         "is_moving": getattr(robot, "is_moving", False),
     }
+
+
+def read_lidar_scan() -> Dict[str, Any]:
+    """
+    Reads the current 360-degree DTOF LiDAR laser scan from the robot's top turret.
+    Returns obstacle clearances (in meters) across 8 directional sectors
+    (front, front_left, left, rear_left, rear, rear_right, right, front_right)
+    and the overall minimum clearance distance around the robot.
+    """
+    robot = get_robot()
+    if hasattr(robot, "get_lidar_scan"):
+        scan = robot.get_lidar_scan()
+        if scan:
+            return {
+                "status": "success",
+                "min_distance_m": scan.get("min_distance_m"),
+                "sectors": scan.get("sectors"),
+            }
+    return {
+        "status": "unavailable",
+        "description": "LiDAR sensor is not available or not connected.",
+    }

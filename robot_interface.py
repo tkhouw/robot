@@ -62,6 +62,16 @@ class BaseRobot(ABC):
         """
         return None
 
+    def get_lidar_scan(
+        self, num_samples: int = 72, max_range: float = 12.0
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Returns a 360-degree DTOF LiDAR range scan.
+        Structure includes 'ranges', 'angles_deg', 'min_distance_m', and 'sectors' dictionary.
+        Returns None if LiDAR hardware is unavailable or not enabled.
+        """
+        return None
+
     # =========================================================================
     # High-Level Semantic Wrappers (Shared identically between Sim & Real)
     # These methods compile semantic requests into official WAVEGO JSON packets.

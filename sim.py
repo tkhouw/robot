@@ -370,6 +370,102 @@ class WavegoSim(BaseRobot):
         img.save(buf, format="JPEG", quality=quality)
         return buf.getvalue()
 
+    def get_lidar_scan(
+        self, num_samples: int = 72, max_range: float = 12.0
+    ) -> Dict[str, Any]:
+        """
+        Simulates a 360-degree DTOF LiDAR scan (Waveshare LD19 standard) using MuJoCo raycasting.
+        Sweeps num_samples planar rays around the robot yaw heading from the lidar site / top chassis.
+        Returns raw ranges, angular headings in degrees, sector summaries, and minimum obstacle clearance.
+        """
+        with self._lock:
+            # Locate base body id to exclude robot's own bodies and geoms from ray intersections
+            base_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base")
+            if base_body_id < 0:
+                base_body_id = 1
+
+            # Ray origin: lidar site on top chassis
+            lidar_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "lidar")
+            if lidar_site_id >= 0:
+                origin = self.data.site_xpos[lidar_site_id].copy()
+            else:
+                origin = self.data.qpos[0:3].copy()
+                origin[2] += 0.050
+
+            # Current body yaw heading in radians
+            w, x, y, z = self.data.qpos[3:7]
+            siny_cosp = 2 * (w * z + x * y)
+            cosy_cosp = 1 - 2 * (y * y + z * z)
+            body_yaw_rad = math.atan2(siny_cosp, cosy_cosp)
+
+            ranges = []
+            angles_deg = []
+            geom_id_buf = np.zeros(1, dtype=np.int32)
+
+            # Sweep from -180 to +180 relative to body heading (0 = directly forward)
+            # In robot frame: 0° = forward, +90° = left, ±180° = rear, -90° = right
+            for i in range(num_samples):
+                rel_angle_rad = -math.pi + (2.0 * math.pi * i / num_samples)
+                world_angle_rad = body_yaw_rad + rel_angle_rad
+                ray_dir = np.array([math.cos(world_angle_rad), math.sin(world_angle_rad), 0.0], dtype=np.float64)
+
+                hit_dist = mujoco.mj_ray(
+                    self.model,
+                    self.data,
+                    origin,
+                    ray_dir,
+                    None,
+                    1,
+                    base_body_id,
+                    geom_id_buf,
+                )
+
+                d = hit_dist if (hit_dist >= 0 and hit_dist <= max_range) else max_range
+                ranges.append(round(float(d), 3))
+                angles_deg.append(round(float(math.degrees(rel_angle_rad)), 1))
+
+        # Sector aggregations (8 cardinal & intercardinal sectors)
+        # Bins: Front [-22.5, 22.5], Front-Left [22.5, 67.5], Left [67.5, 112.5], etc.
+        sector_bins = {
+            "front": [],
+            "front_left": [],
+            "left": [],
+            "rear_left": [],
+            "rear": [],
+            "rear_right": [],
+            "right": [],
+            "front_right": [],
+        }
+
+        for dist, deg in zip(ranges, angles_deg):
+            if -22.5 <= deg <= 22.5:
+                sector_bins["front"].append(dist)
+            elif 22.5 < deg <= 67.5:
+                sector_bins["front_left"].append(dist)
+            elif 67.5 < deg <= 112.5:
+                sector_bins["left"].append(dist)
+            elif 112.5 < deg <= 157.5:
+                sector_bins["rear_left"].append(dist)
+            elif deg > 157.5 or deg < -157.5:
+                sector_bins["rear"].append(dist)
+            elif -157.5 <= deg < -112.5:
+                sector_bins["rear_right"].append(dist)
+            elif -112.5 <= deg < -67.5:
+                sector_bins["right"].append(dist)
+            elif -67.5 <= deg < -22.5:
+                sector_bins["front_right"].append(dist)
+
+        sectors = {k: round(float(np.min(v)), 2) if v else max_range for k, v in sector_bins.items()}
+        min_clearance = round(float(np.min(ranges)), 2) if ranges else max_range
+
+        return {
+            "num_samples": num_samples,
+            "min_distance_m": min_clearance,
+            "sectors": sectors,
+            "ranges": ranges,
+            "angles_deg": angles_deg,
+        }
+
     def launch_viewer(self, target_fps: int = 30, key_callback=None):
         """
         Launches an interactive 3D visualizer window with decoupled physics

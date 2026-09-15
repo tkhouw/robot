@@ -623,6 +623,10 @@
           <div class="val" id="telemYaw">0.0°</div>
         </div>
         <div class="telem-card">
+          <div class="label">LiDAR Clearance</div>
+          <div class="val" id="telemLidar">-- m</div>
+        </div>
+        <div class="telem-card">
           <div class="label">Nav Target</div>
           <div class="val" id="telemGoal">None</div>
         </div>
@@ -1244,6 +1248,22 @@
       document.getElementById('telemPos').textContent = `${t.pos[0].toFixed(2)}, ${t.pos[1].toFixed(2)} m`;
       document.getElementById('telemYaw').textContent = `${t.yaw.toFixed(1)}°`;
       
+      const lidarEl = document.getElementById('telemLidar');
+      if (lidarEl && t.lidar) {
+        const minDist = t.lidar.min_distance_m;
+        const isDetour = t.action_details && t.action_details.lidar && t.action_details.lidar.is_detouring;
+        if (minDist !== null && minDist !== undefined) {
+          lidarEl.textContent = `${minDist.toFixed(2)}m${isDetour ? ' (Detour)' : ''}`;
+          if (minDist < 0.25) {
+            lidarEl.style.color = 'var(--accent-red, #f85149)';
+          } else if (minDist < 0.45) {
+            lidarEl.style.color = 'var(--accent-orange, #d29922)';
+          } else {
+            lidarEl.style.color = 'var(--accent-blue, #58a6ff)';
+          }
+        }
+      }
+
       const act = t.active_action;
       const details = t.action_details || {};
       let actDisplay = 'Idle';
