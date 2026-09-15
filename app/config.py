@@ -41,6 +41,32 @@ class AgentConfig(BaseSettings):
         "kitchen": (3.5, -1.2),
     }
 
+    # Locomotion & Speed Settings (Configurable limits based on physical 4-bar linkage dynamics)
+    # gait_speed: Base gait frequency (cycles/second). Tested safe range: [1.0, 2.4].
+    # Values > 2.4 exceed the 40ms bus servo bandwidth and cause foot slippage.
+    gait_speed: float = 2.2
+
+    # walk_range_mm: Stride reach in mm (forward/backward stroke). Tested safe range: [30.0, 55.0].
+    # Values > 55.0 approach mechanical linkage singularities and cause pitch tilt.
+    walk_range_mm: float = 50.0
+
+    # walk_lift_mm: Vertical foot ground clearance in mm. Tested safe range: [8.0, 18.0].
+    # Higher values provide cleaner obstacle/floor liftoff at high frequencies.
+    walk_lift_mm: float = 13.0
+
+    # nav_walk_speed: Forward FB speed for straight landmark navigation. Range: [20.0, 100.0].
+    nav_walk_speed: float = 85.0
+
+    # nav_detour_speed: Forward FB speed during obstacle avoidance detours. Range: [20.0, 90.0].
+    nav_detour_speed: float = 70.0
+
+    # nav_turn_speed: In-place turning LR speed. Tested safe range: [20.0, 60.0].
+    nav_turn_speed: float = 45.0
+
+    # sim_time_warp: Wall-clock simulation speed multiplier. Tested range: [0.5, 3.0].
+    # 1.0 = true real-time, 1.5 = 1.5x real-time speed.
+    sim_time_warp: float = 1.0
+
     # 360 DTOF LiDAR & Obstacle Avoidance Settings
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0

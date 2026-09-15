@@ -656,11 +656,14 @@ class ActionManager:
                 if self._is_aligning_heading and dist > 0.20:
                     # Pure crisp in-place pivot to align head with target corridor
                     # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
-                    turn_cmd = -45.0 if heading_err > 0 else 45.0
+                    turn_speed = getattr(config, "nav_turn_speed", 45.0)
+                    turn_cmd = -turn_speed if heading_err > 0 else turn_speed
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
                     # Pure forward stride with 100% sagittal traction (zero lateral slip)
-                    forward_speed = 75.0 if not is_detouring else 60.0
+                    walk_spd = getattr(config, "nav_walk_speed", 85.0)
+                    detour_spd = getattr(config, "nav_detour_speed", 70.0)
+                    forward_speed = walk_spd if not is_detouring else detour_spd
                     robot.walk(fb=forward_speed, lr=0.0)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)

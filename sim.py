@@ -20,6 +20,7 @@ from wavego_kinematics import (
 )
 
 from robot_interface import BaseRobot
+from app.config import config
 from wavego_protocol import (
     CMD_STAND_UP,
     CMD_BASIC_MOVE,
@@ -49,11 +50,13 @@ class WavegoSim(BaseRobot):
         self.data = mujoco.MjData(self.model)
         self.kinematics = WavegoKinematics()
 
-        # Motion & Gait State
+        # Motion & Gait State configured from config.py
         self.move_fb = 0.0      # Forward / Backward (-100 to 100)
         self.move_lr = 0.0      # Turn Left / Right (-100 to 100)
         self.walk_cycle = 0.0   # Gait cycle phase [0, 1)
-        self.gait_speed = 1.5   # Gait frequency (cycles/second) - authentic brisk quadruped trot
+        self.gait_speed = getattr(config, "gait_speed", 2.2)
+        self.kinematics.walk_range = getattr(config, "walk_range_mm", 50.0)
+        self.kinematics.walk_lift = getattr(config, "walk_lift_mm", 13.0)
         self.stand_h = STAND_HEIGHT
 
         # Actuator mapping (12 serial-bus servo actuators)
@@ -475,6 +478,7 @@ class WavegoSim(BaseRobot):
         """
         render_interval = 1.0 / target_fps
         sim_dt = self.model.opt.timestep
+        time_warp = getattr(config, "sim_time_warp", 1.0)
         last_render_time = time.time()
         self.has_active_viewer = True
 
@@ -488,18 +492,30 @@ class WavegoSim(BaseRobot):
                 for g in range(6):
                     viewer.opt.geomgroup[g] = 1
 
-                while viewer.is_running():
-                    now = time.time()
-                    self.step()
+                sim_time_accumulator = 0.0
+                last_wall_time = time.perf_counter()
 
+                while viewer.is_running():
+                    now_wall = time.perf_counter()
+                    dt_wall = min(now_wall - last_wall_time, 0.1)  # Cap against pause freezes
+                    last_wall_time = now_wall
+                    sim_time_accumulator += dt_wall * time_warp
+
+                    # Step physics up to wall-clock requirement in batches (Option C)
+                    # Eliminates OS sleep quantum bottleneck
+                    steps_taken = 0
+                    while sim_time_accumulator >= sim_dt and steps_taken < 25:
+                        self.step()
+                        sim_time_accumulator -= sim_dt
+                        steps_taken += 1
+
+                    now = time.time()
                     if now - last_render_time >= render_interval:
                         with self._lock:
                             viewer.sync()
                         last_render_time = now
 
-                    elapsed = time.time() - now
-                    sleep_time = sim_dt - elapsed
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
+                    # Sleep briefly to yield CPU without throttling physics rate
+                    time.sleep(0.001)
         finally:
             self.has_active_viewer = False
