@@ -637,9 +637,10 @@ class ActionManager:
                 while heading_err < -180.0:
                     heading_err += 360.0
 
-                # Dynamic Locomotion: In-place alignment vs. Curvy Trotting
-                # When detouring, allow curvy trotting up to 30 deg heading error
-                # Only use in-place pivot for sharp deflections (> 30 deg)
+                # Dynamic Locomotion: In-place alignment vs. Traction-Preserving Curvy Trotting
+                # When detouring or steering, allow curvy trotting for heading errors up to 30 deg.
+                # To prevent foot slippage caused by continuous pure lateral pushing, we interleave
+                # forward traction trot cycles with corrective steering impulses.
                 turn_in_place_thresh = 30.0
 
                 if abs(heading_err) > turn_in_place_thresh and dist > 0.20:
@@ -647,11 +648,20 @@ class ActionManager:
                     turn_cmd = -40.0 if heading_err > 0 else 40.0
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
-                    # Curvy trotting: forward trot + lateral turning arc
-                    # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
-                    lr_correction = max(-40.0, min(40.0, -heading_err * 2.5))
-                    forward_speed = 75.0 if not is_detouring else 45.0
-                    robot.walk(fb=forward_speed, lr=lr_correction)
+                    # Traction-preserving curvy trotting:
+                    # Alternate 2 cycles of straight forward traction with 1 cycle of corrective steering
+                    # This prevents the foot linkages from skidding laterally across the floor
+                    walk_cycle = getattr(robot, "walk_cycle", 0.0)
+                    cycle_subphase = int(walk_cycle * 3.0) % 3
+
+                    if abs(heading_err) <= 5.0 or cycle_subphase < 2:
+                        # Full forward traction phase (straight trot)
+                        forward_speed = 75.0 if not is_detouring else 55.0
+                        robot.walk(fb=forward_speed, lr=0.0)
+                    else:
+                        # Corrective steering pulse phase (steers without losing momentum)
+                        lr_cmd = -40.0 if heading_err > 0 else 40.0
+                        robot.walk(fb=35.0, lr=lr_cmd)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
                 if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
