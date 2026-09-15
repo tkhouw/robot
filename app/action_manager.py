@@ -637,31 +637,31 @@ class ActionManager:
                 while heading_err < -180.0:
                     heading_err += 360.0
 
-                # Dynamic Locomotion: In-place alignment vs. Traction-Preserving Curvy Trotting
-                # When detouring or steering, allow curvy trotting for heading errors up to 30 deg.
-                # To prevent foot slippage caused by continuous pure lateral pushing, we interleave
-                # forward traction trot cycles with corrective steering impulses.
-                turn_in_place_thresh = 30.0
+                # Dynamic Locomotion: Interspersed In-Place Turns + Pure Forward Strides
+                # (No strafing or diagonal skidding; head always points toward path of motion)
+                if not hasattr(self, "_is_aligning_heading"):
+                    self._is_aligning_heading = False
 
-                if abs(heading_err) > turn_in_place_thresh and dist > 0.20:
-                    # Sharp deflection: pivot in place to face open corridor
-                    turn_cmd = -40.0 if heading_err > 0 else 40.0
+                # Hysteresis thresholds: initiate turn when error > 12 deg, exit turn when aligned within 4 deg
+                align_entry_thresh = 12.0
+                align_exit_thresh = 4.0
+
+                if not self._is_aligning_heading:
+                    if abs(heading_err) > align_entry_thresh and dist > 0.20:
+                        self._is_aligning_heading = True
+                else:
+                    if abs(heading_err) <= align_exit_thresh:
+                        self._is_aligning_heading = False
+
+                if self._is_aligning_heading and dist > 0.20:
+                    # Pure crisp in-place pivot to align head with target corridor
+                    # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
+                    turn_cmd = -45.0 if heading_err > 0 else 45.0
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
-                    # Traction-preserving curvy trotting:
-                    # Alternate 2 cycles of straight forward traction with 1 cycle of corrective steering
-                    # This prevents the foot linkages from skidding laterally across the floor
-                    walk_cycle = getattr(robot, "walk_cycle", 0.0)
-                    cycle_subphase = int(walk_cycle * 3.0) % 3
-
-                    if abs(heading_err) <= 5.0 or cycle_subphase < 2:
-                        # Full forward traction phase (straight trot)
-                        forward_speed = 75.0 if not is_detouring else 55.0
-                        robot.walk(fb=forward_speed, lr=0.0)
-                    else:
-                        # Corrective steering pulse phase (steers without losing momentum)
-                        lr_cmd = -40.0 if heading_err > 0 else 40.0
-                        robot.walk(fb=35.0, lr=lr_cmd)
+                    # Pure forward stride with 100% sagittal traction (zero lateral slip)
+                    forward_speed = 75.0 if not is_detouring else 60.0
+                    robot.walk(fb=forward_speed, lr=0.0)
 
                 # Advance physics in simulation if available (and if not driven by active 3D viewer)
                 if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
