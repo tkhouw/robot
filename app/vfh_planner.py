@@ -141,15 +141,26 @@ class VFHPlanner:
         # Find index corresponding closest to goal angle in robot frame
         goal_bin_idx = int(np.argmin(np.abs((rel_angles_deg - goal_diff + 180.0) % 360.0 - 180.0)))
 
-        # 4. Check if the direct line to goal is unobstructed
+        # 4. Check if the direct line to goal is unobstructed (Dual-Threshold Hysteresis)
         # Direct path check covers bins within +/- 35 degrees of goal direction (wider corridor)
         half_window = max(3, int(35.0 / self.bin_width_deg))
         direct_blocked = False
+
+        # Threshold depends on whether we are already in detour mode:
+        # - Entry threshold: tau_high (0.15)
+        # - Exit threshold: tau_low (0.06)
+        threshold = self.tau_low if self.is_detouring else self.tau_high
+
         for offset in range(-half_window, half_window + 1):
             idx = (goal_bin_idx + offset) % n
-            if smoothed_density[idx] > self.tau_high:
+            if smoothed_density[idx] > threshold:
                 direct_blocked = True
                 break
+
+        # If already detouring, also require closest obstacle clearance before exiting detour:
+        if self.is_detouring and not direct_blocked:
+            if min_dist < self.safe_distance_m:
+                direct_blocked = True
 
         # Unified Flank Clearance Guard (Body-Frame):
         # The robot's physical flanks are located at relative angles:

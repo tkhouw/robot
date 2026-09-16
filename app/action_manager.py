@@ -520,7 +520,7 @@ class ActionManager:
                         safe_distance_m=getattr(config, "lidar_obstacle_distance_m", 1.00),
                         emergency_stop_m=getattr(config, "lidar_emergency_stop_m", 0.16),
                         density_threshold_high=0.15,
-                        density_threshold_low=0.08,
+                        density_threshold_low=0.06,
                         robot_radius_m=0.18,
                     )
 
@@ -657,8 +657,10 @@ class ActionManager:
                 if self._is_aligning_heading and dist > 0.20:
                     # Pure crisp in-place pivot to align head with target corridor
                     # In Waveshare kinematics: negative lr turns CCW (Left), positive turns CW (Right)
-                    turn_speed = getattr(config, "nav_turn_speed", 45.0)
-                    turn_cmd = -turn_speed if heading_err > 0 else turn_speed
+                    turn_spd = getattr(config, "nav_turn_speed", 25.0)
+                    detour_turn_spd = getattr(config, "nav_detour_turn_speed", 20.0)
+                    active_turn_speed = detour_turn_spd if is_detouring else turn_spd
+                    turn_cmd = -active_turn_speed if heading_err > 0 else active_turn_speed
                     robot.walk(fb=0.0, lr=turn_cmd)
                 else:
                     # Pure forward stride with 100% sagittal traction (zero lateral slip)
