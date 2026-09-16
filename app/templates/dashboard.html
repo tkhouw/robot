@@ -78,22 +78,43 @@
       border-right: 1px solid var(--border-color);
       background-color: #090d13;
       overflow-y: auto;
+      overflow-x: hidden;
+      height: 100%;
     }
-    .layout-side .viewport-pane { width: 50%; min-width: 480px; }
+    .layout-side .viewport-pane { width: 50%; min-width: 420px; }
     .layout-stacked .viewport-pane { width: 100%; height: 50%; border-right: none; border-bottom: 1px solid var(--border-color); }
 
+    /* Resizable Video Viewport */
     .video-wrapper {
       position: relative;
       background: #000;
       width: 100%;
-      height: 320px;
+      height: 460px;
+      min-height: 220px;
+      max-height: 1200px;
+      flex-shrink: 0;
+      resize: vertical;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
+      border-bottom: 2px solid var(--border-color);
+    }
+    .video-wrapper::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-right: 3px solid #58a6ff;
+      border-bottom: 3px solid #58a6ff;
+      pointer-events: none;
+      opacity: 0.75;
     }
     .video-wrapper img {
-      max-width: 100%;
-      max-height: 100%;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
     }
     .video-overlay-controls {
@@ -102,6 +123,7 @@
       right: 10px;
       display: flex;
       gap: 6px;
+      z-index: 5;
     }
     .cam-btn {
       background: rgba(22, 27, 34, 0.85);
@@ -123,6 +145,7 @@
       padding: 12px;
       background: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
     }
     .telem-card {
       background: #0d1117;
@@ -133,73 +156,107 @@
     .telem-card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; }
     .telem-card .val { font-size: 0.95rem; font-weight: 600; color: #f0f6fc; margin-top: 2px; }
 
-    /* VFH Polar Heatmap Panel */
+    /* VFH Polar Obstacle Radar Panel (Centered, Prominent & Resizable) */
     .vfh-panel {
-      padding: 10px 14px;
+      padding: 16px 18px;
       background: #090d13;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 2px solid var(--border-color);
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      height: 440px;
+      min-height: 280px;
+      max-height: 1000px;
+      flex-shrink: 0;
+      resize: vertical;
+      overflow: hidden;
+      position: relative;
     }
-    .vfh-info {
-      flex: 1;
-      min-width: 200px;
+    .vfh-panel::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-right: 3px solid #58a6ff;
+      border-bottom: 3px solid #58a6ff;
+      pointer-events: none;
+      opacity: 0.75;
     }
-    .vfh-info h4 {
-      font-size: 0.8rem;
+    .vfh-header-centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+      max-width: 560px;
+      flex-shrink: 0;
+    }
+    .vfh-header-centered h4 {
+      font-size: 1.05rem;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
       color: #f0f6fc;
       margin-bottom: 4px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      gap: 8px;
     }
-    .vfh-info p {
-      font-size: 0.72rem;
+    .vfh-header-centered p {
+      font-size: 0.78rem;
       color: var(--text-dim);
       line-height: 1.3;
       margin: 0;
     }
     .vfh-legend {
       display: flex;
-      gap: 10px;
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      margin-top: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 0.76rem;
+      color: #c9d1d9;
+      margin-top: 8px;
+      padding: 6px 14px;
+      background: rgba(22, 27, 34, 0.7);
+      border: 1px solid #30363d;
+      border-radius: 6px;
     }
     .vfh-legend-item {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     .vfh-canvas-wrapper {
       position: relative;
-      width: 140px;
-      height: 140px;
+      flex: 1;
+      width: 100%;
+      min-height: 260px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     #vfhCanvas {
-      width: 140px;
-      height: 140px;
+      width: 360px;
+      height: 360px;
       border-radius: 50%;
       background: #0d1117;
-      border: 1px solid #30363d;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      border: 2px solid #30363d;
+      box-shadow: 0 0 24px rgba(0,0,0,0.7);
+      transition: width 0.1s ease, height 0.1s ease;
     }
     .vfh-center-icon {
       position: absolute;
-      width: 24px;
-      height: 24px;
+      width: 40px;
+      height: 40px;
       pointer-events: none;
       transition: transform 0.1s ease;
     }
 
+    /* 2D Landmark Arena Map */
     .map-container {
       padding: 12px;
       display: flex;
@@ -207,6 +264,7 @@
       gap: 8px;
       background: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
     }
     .map-header {
       display: flex;
@@ -230,17 +288,18 @@
       align-items: center;
       gap: 6px;
     }
-    .map-size-btn {
+    .map-action-btn {
       background: #21262d;
       border: 1px solid var(--border-color);
       color: var(--text-dim);
-      padding: 2px 8px;
+      padding: 4px 10px;
       border-radius: 4px;
       font-size: 0.75rem;
       cursor: pointer;
       font-weight: 600;
+      transition: background 0.15s, color 0.15s;
     }
-    .map-size-btn:hover, .map-size-btn.active {
+    .map-action-btn:hover {
       background: #30363d;
       color: #fff;
       border-color: #58a6ff;
@@ -248,15 +307,28 @@
     .map-wrapper {
       position: relative;
       width: 100%;
-      height: 320px;
-      min-height: 180px;
-      max-height: 600px;
+      height: 500px;
+      min-height: 220px;
+      max-height: 1200px;
+      flex-shrink: 0;
       resize: vertical;
       overflow: hidden;
       border: 1px solid var(--border-color);
       border-radius: 8px;
       background: #0d1117;
       box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    }
+    .map-wrapper::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-right: 3px solid #58a6ff;
+      border-bottom: 3px solid #58a6ff;
+      pointer-events: none;
+      opacity: 0.75;
     }
     .arena-map {
       width: 100%;
@@ -370,7 +442,7 @@
       display: flex;
       flex-direction: column;
       background-color: var(--card-bg);
-      overflow: hidden;
+      overflow-y: auto;
     }
     .layout-side .control-pane { width: 50%; }
     .layout-stacked .control-pane { width: 100%; height: 50%; }
@@ -449,6 +521,33 @@
       height: 100%;
       width: 0%;
       transition: width 0.3s;
+    }
+
+    /* Resizable Cognition Feed & Chat Container */
+    .cognition-feed-wrapper {
+      position: relative;
+      height: 520px;
+      min-height: 240px;
+      max-height: 1400px;
+      flex-shrink: 0;
+      resize: vertical;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 2px solid var(--border-color);
+      background: #090d13;
+    }
+    .cognition-feed-wrapper::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-right: 3px solid #58a6ff;
+      border-bottom: 3px solid #58a6ff;
+      pointer-events: none;
+      opacity: 0.75;
     }
 
     /* Real-Time Cognition Stream */
@@ -703,24 +802,24 @@
         </div>
       </div>
 
-      <!-- VFH Obstacle Density Polar Heatmap Widget -->
-      <div class="vfh-panel">
-        <div class="vfh-info">
+      <!-- VFH Obstacle Density Polar Heatmap Widget (Centered & Prominently Displayed) -->
+      <div class="vfh-panel" id="vfhPanel">
+        <div class="vfh-header-centered">
           <h4>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 12l7-7"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 12l7-7"/></svg>
             VFH Polar Obstacle Radar
           </h4>
           <p id="vfhStatusText">Continuous 360° obstacle density map & valley steering selector.</p>
           <div class="vfh-legend">
-            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#238636;"></span> Clear Valley</span>
-            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d29922;"></span> Caution</span>
-            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f85149;"></span> Blocked</span>
-            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:2px;background:#58a6ff;"></span> Goal</span>
-            <span class="vfh-legend-item"><span style="display:inline-block;width:8px;height:2px;background:#3fb950;"></span> VFH Steering</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#238636;"></span> Clear Valley</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d29922;"></span> Caution</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f85149;"></span> Blocked</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:12px;height:2.5px;background:#58a6ff;"></span> Goal</span>
+            <span class="vfh-legend-item"><span style="display:inline-block;width:12px;height:3px;background:#3fb950;"></span> VFH Steering</span>
           </div>
         </div>
-        <div class="vfh-canvas-wrapper">
-          <canvas id="vfhCanvas" width="280" height="280"></canvas>
+        <div class="vfh-canvas-wrapper" id="vfhCanvasWrapper">
+          <canvas id="vfhCanvas" width="560" height="560"></canvas>
           <!-- Center Robot Quadruped Silhouette Icon -->
           <svg class="vfh-center-icon" id="vfhRobotIcon" viewBox="0 0 24 24" fill="none" stroke="#f0f6fc" stroke-width="2">
             <rect x="7" y="5" width="10" height="14" rx="3" fill="#21262d" stroke="#58a6ff"/>
@@ -741,11 +840,7 @@
             Smart Home Landmark Arena
           </h3>
           <div class="map-controls">
-            <span style="font-size: 0.7rem; color: var(--text-dim); margin-right: 4px;">Height:</span>
-            <button class="map-size-btn" onclick="setMapSize(220)" id="btnSizeS">S</button>
-            <button class="map-size-btn active" onclick="setMapSize(340)" id="btnSizeM">M</button>
-            <button class="map-size-btn" onclick="setMapSize(500)" id="btnSizeL">L</button>
-            <button class="map-size-btn" onclick="clearOdometryTrail()" title="Clear odometry path">Clear Trail</button>
+            <button class="map-action-btn" onclick="clearOdometryTrail()" title="Clear odometry path">Clear Trail</button>
           </div>
         </div>
 
@@ -955,18 +1050,20 @@
         </div>
       </div>
 
-      <!-- Real-Time ADK Cognition Feed -->
-      <div class="feed-container" id="feedContainer">
-        <div class="feed-card card-prompt">
-          <strong>System Ready:</strong> Event Gateway active on port 8000. Send a stimulus event or message below to start reasoning.
+      <!-- Resizable Real-Time ADK Cognition Feed & Chat Interface -->
+      <div class="cognition-feed-wrapper" id="cognitionFeedWrapper">
+        <div class="feed-container" id="feedContainer">
+          <div class="feed-card card-prompt">
+            <strong>System Ready:</strong> Event Gateway active on port 8000. Send a stimulus event or message below to start reasoning.
+          </div>
         </div>
-      </div>
 
-      <!-- User Chat Input -->
-      <form class="chat-section" onsubmit="sendUserMessage(event)">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Say something or give an instruction... (e.g. 'Walk forward and check front door')">
-        <button type="submit" class="chat-send-btn">Send</button>
-      </form>
+        <!-- User Chat Input -->
+        <form class="chat-section" onsubmit="sendUserMessage(event)">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Say something or give an instruction... (e.g. 'Walk forward and check front door')">
+          <button type="submit" class="chat-send-btn">Send</button>
+        </form>
+      </div>
     </div>
 
   </div>
@@ -1209,14 +1306,6 @@
     }
     fetchLandmarks();
 
-    function setMapSize(heightPx) {
-      const wrapper = document.getElementById('mapWrapper');
-      wrapper.style.height = `${heightPx}px`;
-      document.getElementById('btnSizeS').classList.toggle('active', heightPx <= 220);
-      document.getElementById('btnSizeM').classList.toggle('active', heightPx > 220 && heightPx <= 360);
-      document.getElementById('btnSizeL').classList.toggle('active', heightPx > 360);
-    }
-
     function clearOdometryTrail() {
       odometryPoints = [];
       const trail = document.getElementById('odometryTrail');
@@ -1432,8 +1521,52 @@
       renderVfhRadar(t);
     }
 
+    // Dynamic VFH Radar Resizing Engine
+    let lastTelemetryData = null;
+
+    function resizeVfhCanvas() {
+      const canvas = document.getElementById('vfhCanvas');
+      const wrapper = document.getElementById('vfhCanvasWrapper');
+      if (!canvas || !wrapper) return;
+
+      const availW = wrapper.clientWidth || 400;
+      const availH = wrapper.clientHeight || 340;
+      // Fit largest square circle with margin inside the wrapper
+      const size = Math.max(260, Math.min(availW - 20, availH - 20, 800));
+
+      // Display size (CSS)
+      canvas.style.width = `${size}px`;
+      canvas.style.height = `${size}px`;
+
+      // Backing store size (High-DPI 2x for retina sharpness)
+      const dpr = window.devicePixelRatio || 2;
+      canvas.width = Math.round(size * dpr);
+      canvas.height = Math.round(size * dpr);
+
+      // Scale robot icon proportionally
+      const icon = document.getElementById('vfhRobotIcon');
+      if (icon) {
+        const iconSize = Math.max(24, Math.round(size * 0.12));
+        icon.style.width = `${iconSize}px`;
+        icon.style.height = `${iconSize}px`;
+      }
+
+      if (lastTelemetryData) {
+        renderVfhRadar(lastTelemetryData);
+      }
+    }
+
+    const vfhPanelEl = document.getElementById('vfhPanel');
+    if (vfhPanelEl) {
+      const vfhObserver = new ResizeObserver(() => {
+        resizeVfhCanvas();
+      });
+      vfhObserver.observe(vfhPanelEl);
+    }
+
     // Function to render the 360° Polar Vector Field Histogram (VFH) Radar
     function renderVfhRadar(t) {
+      lastTelemetryData = t;
       const canvas = document.getElementById('vfhCanvas');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -1443,14 +1576,14 @@
       const height = canvas.height;
       const cx = width / 2;
       const cy = height / 2;
-      const maxRadius = width / 2 - 8;
-      const innerRadius = 24;
+      const maxRadius = (width / 2) - (width * 0.04);
+      const innerRadius = Math.max(18, width * 0.09);
 
       ctx.clearRect(0, 0, width, height);
 
       // Draw background concentric range rings
       ctx.strokeStyle = '#21262d';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(1, width * 0.0035);
       for (const rFrac of [0.35, 0.65, 1.0]) {
         ctx.beginPath();
         ctx.arc(cx, cy, innerRadius + (maxRadius - innerRadius) * rFrac, 0, Math.PI * 2);
@@ -1502,9 +1635,9 @@
           // Heatmap Color: Green (0.0) -> Yellow (0.25) -> Red (1.0)
           let color = '#238636'; // Green
           if (density > 0.40) {
-            color = `rgba(248, 81, 73, ${Math.min(1.0, 0.4 + density * 0.6)})`; // Red
+            color = `rgba(248, 81, 73, ${Math.min(1.0, 0.45 + density * 0.55)})`; // Red
           } else if (density > 0.12) {
-            color = `rgba(210, 153, 34, ${Math.min(1.0, 0.3 + density * 0.7)})`; // Orange/Yellow
+            color = `rgba(210, 153, 34, ${Math.min(1.0, 0.35 + density * 0.65)})`; // Orange/Yellow
           } else {
             color = `rgba(35, 134, 54, ${0.15 + (1.0 - density) * 0.25})`; // Soft green valley
           }
@@ -1529,8 +1662,8 @@
         const gy = cy + Math.sin(goalAngleRad) * (maxRadius - 4);
 
         ctx.strokeStyle = '#58a6ff';
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = Math.max(2, width * 0.007);
+        ctx.setLineDash([Math.round(width * 0.012), Math.round(width * 0.012)]);
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(gx, gy);
@@ -1540,7 +1673,7 @@
         // Small goal arrow/dot
         ctx.fillStyle = '#58a6ff';
         ctx.beginPath();
-        ctx.arc(gx, gy, 4, 0, Math.PI * 2);
+        ctx.arc(gx, gy, Math.max(4, width * 0.012), 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1552,7 +1685,7 @@
         const vy = cy + Math.sin(chosenAngleRad) * (maxRadius + 2);
 
         ctx.strokeStyle = '#3fb950';
-        ctx.lineWidth = 3.5;
+        ctx.lineWidth = Math.max(3, width * 0.01);
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(vx, vy);
@@ -1561,7 +1694,7 @@
         // Arrow tip
         ctx.fillStyle = '#3fb950';
         ctx.beginPath();
-        ctx.arc(vx, vy, 5, 0, Math.PI * 2);
+        ctx.arc(vx, vy, Math.max(5, width * 0.015), 0, Math.PI * 2);
         ctx.fill();
       }
     }
