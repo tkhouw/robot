@@ -25,6 +25,9 @@ class VFHPlanner:
         weight_current_heading: float = 0.5,
         weight_prev_steering: float = 3.0,
         robot_radius_m: float = 0.18,
+        smoothing_tau_s: float = 1.0,
+        flank_clearance_m: float = 0.16,
+        safety_margin_deg: float = 25.0,
     ):
         self.num_bins = num_bins
         self.bin_width_deg = 360.0 / num_bins
@@ -33,6 +36,9 @@ class VFHPlanner:
         self.tau_high = density_threshold_high
         self.tau_low = density_threshold_low
         self.robot_radius_m = robot_radius_m
+        self.smoothing_tau_s = max(0.01, smoothing_tau_s)
+        self.flank_clearance_m = flank_clearance_m
+        self.safety_margin_deg = safety_margin_deg
 
         # Cost function weights (anti-oscillation tuning)
         self.weight_goal = weight_goal
@@ -44,7 +50,11 @@ class VFHPlanner:
         self.is_detouring: bool = False
         self.detour_start_time: float = 0.0
 
-        # Circular Gaussian smoothing kernel
+        # Temporal Exponential Smoothing State (low-pass filter across time)
+        self.temporal_density: Optional[np.ndarray] = None
+        self.last_update_time: Optional[float] = None
+
+        # Circular Gaussian spatial smoothing kernel
         self.kernel = np.array([0.06, 0.24, 0.40, 0.24, 0.06], dtype=np.float64)
 
     def reset(self):
@@ -52,6 +62,8 @@ class VFHPlanner:
         self.last_selected_heading_deg = None
         self.is_detouring = False
         self.detour_start_time = 0.0
+        self.temporal_density = None
+        self.last_update_time = None
 
     def compute_steering(
         self,
@@ -59,6 +71,7 @@ class VFHPlanner:
         current_yaw_deg: float,
         target_heading_deg: float,
         dist_to_goal: float,
+        timestamp: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Computes the optimal steering heading using True VFH.
@@ -68,6 +81,7 @@ class VFHPlanner:
             current_yaw_deg: Robot body yaw in degrees (-180 to +180).
             target_heading_deg: Direct heading toward goal landmark in degrees (-180 to +180).
             dist_to_goal: Euclidean distance to goal in meters.
+            timestamp: Current timestamp (seconds) for exponential temporal smoothing.
 
         Returns:
             Dictionary containing:
@@ -78,6 +92,9 @@ class VFHPlanner:
                 - 'polar_density': Smoothed obstacle density array (for UI heatmap).
                 - 'min_distance_m': Closest obstacle clearance.
         """
+        import time
+
+        curr_time = timestamp if timestamp is not None else time.time()
         n = self.num_bins
         if len(lidar_ranges) != n:
             # Resample or pad if sample count differs
@@ -125,13 +142,26 @@ class VFHPlanner:
                     raw_density[left_idx] = max(raw_density[left_idx], enlarge_certainty)
                     raw_density[right_idx] = max(raw_density[right_idx], enlarge_certainty)
 
-        # 2. Circular periodic convolution for Gaussian smoothing (takes robot width into account)
+        # 2. Circular periodic convolution for Gaussian spatial smoothing
         k_len = len(self.kernel)
         pad = k_len // 2
         padded = np.concatenate([raw_density[-pad:], raw_density, raw_density[:pad]])
-        smoothed_density = np.convolve(padded, self.kernel, mode="valid")
+        instant_spatial_density = np.convolve(padded, self.kernel, mode="valid")
 
-        # 3. Bin angles in world frame
+        # 3. Temporal Exponential Smoothing across time: D_t = (1 - alpha) * D_{t-1} + alpha * D_instant
+        # alpha = 1 - exp(-dt / tau). As dt -> 0, alpha -> dt / tau.
+        # This prevents single-frame noise/chatter from causing twitchy steering maneuvers.
+        if self.temporal_density is None or self.last_update_time is None:
+            self.temporal_density = instant_spatial_density.copy()
+        else:
+            dt = max(0.001, min(1.0, curr_time - self.last_update_time))
+            alpha = float(1.0 - math.exp(-dt / self.smoothing_tau_s))
+            self.temporal_density = (1.0 - alpha) * self.temporal_density + alpha * instant_spatial_density
+
+        self.last_update_time = curr_time
+        smoothed_density = self.temporal_density
+
+        # 4. Bin angles in world frame
         # Lidar rays sweep from -180 to +180 relative to body
         rel_angles_deg = np.linspace(-180.0, 180.0, n, endpoint=False)
         world_bin_angles_deg = (current_yaw_deg + rel_angles_deg + 180.0) % 360.0 - 180.0
@@ -141,7 +171,7 @@ class VFHPlanner:
         # Find index corresponding closest to goal angle in robot frame
         goal_bin_idx = int(np.argmin(np.abs((rel_angles_deg - goal_diff + 180.0) % 360.0 - 180.0)))
 
-        # 4. Check if the direct line to goal is unobstructed (Dual-Threshold Hysteresis)
+        # 5. Check if the direct line to goal is unobstructed (Dual-Threshold Hysteresis)
         # Direct path check covers bins within +/- 35 degrees of goal direction (wider corridor)
         half_window = max(3, int(35.0 / self.bin_width_deg))
         direct_blocked = False
@@ -165,9 +195,9 @@ class VFHPlanner:
         # Unified Flank Clearance Guard (Body-Frame):
         # The robot's physical flanks are located at relative angles:
         # Left Flank: [+40°, +120°], Right Flank: [-120°, -40°]
-        # If an obstacle encroaches within 0.20m of either flank, turning toward that side
+        # If an obstacle encroaches within flank_clearance_m of either flank, turning toward that side
         # would sweep the robot's rear legs/hips into the corner.
-        flank_min_clearance_m = 0.20
+        flank_min_clearance_m = self.flank_clearance_m
         left_flank_min = float("inf")
         right_flank_min = float("inf")
 
@@ -200,7 +230,7 @@ class VFHPlanner:
                 "min_distance_m": round(min_dist, 2),
             }
 
-        # 5. Direct path is blocked -> Enter Detour Mode & extract candidate valleys
+        # 6. Direct path is blocked -> Enter Detour Mode & extract candidate valleys
         self.is_detouring = True
 
         # Group contiguous clear bins (density <= tau_low) into discrete open valleys
@@ -232,7 +262,7 @@ class VFHPlanner:
         # Authentic VFH algorithm:
         # - Wide valley: candidates are border + s_max (safety clearance)
         # - Narrow valley: candidate is valley center
-        s_max_bins = max(4, int(35.0 / self.bin_width_deg))  # 35 deg obstacle clearance margin (wider berth)
+        s_max_bins = max(2, int(self.safety_margin_deg / self.bin_width_deg))  # Configurable obstacle clearance margin
         candidate_headings_world = []
 
         for v_start, v_end in valleys:

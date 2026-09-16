@@ -76,7 +76,12 @@ class AgentConfig(BaseSettings):
     lidar_max_range_m: float = 12.0
     lidar_obstacle_distance_m: float = 0.60  # Distance threshold to initiate detour circumvention
     lidar_emergency_stop_m: float = 0.10     # Hard collision stop buffer
-    lidar_detour_timeout_s: float = 15.0     # Time off-track navigating around obstacle before waking agent
+    lidar_detour_timeout_s: float = 60.0     # Time off-track navigating around obstacle before waking agent
+
+    # Vector Field Histogram (VFH) Dynamic Filter & Safety Buffer Settings
+    vfh_smoothing_tau_s: float = 1.0         # Exponential smoothing time constant (seconds) for temporal density filtering
+    vfh_flank_clearance_m: float = 0.20      # Lateral flank safety buffer (distance to left/right hips)
+    vfh_safety_margin_deg: float = 25.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
 
 
 config = AgentConfig()
