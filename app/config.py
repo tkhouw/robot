@@ -55,17 +55,17 @@ class AgentConfig(BaseSettings):
     walk_lift_mm: float = 13.0
 
     # nav_walk_speed: Forward FB speed for straight landmark navigation. Range: [20.0, 100.0].
-    nav_walk_speed: float = 50.0
+    nav_walk_speed: float = 90.0
 
     # nav_detour_speed: Forward FB speed during obstacle avoidance detours. Range: [20.0, 90.0].
-    nav_detour_speed: float = 50.0
+    nav_detour_speed: float = 90.0
 
     # nav_turn_speed: In-place turning LR speed for normal course corrections. Range: [15.0, 50.0].
-    nav_turn_speed: float = 10.0
+    nav_turn_speed: float = 20.0
 
     # nav_detour_turn_speed: In-place turning LR speed during obstacle detours. Range: [10.0, 35.0].
     # Slower turning prevents high rotational inertia and tipping during sharp pivots.
-    nav_detour_turn_speed: float = 10.0
+    nav_detour_turn_speed: float = 20.0
 
     # sim_time_warp: Wall-clock simulation speed multiplier. Tested range: [0.5, 3.0].
     # 1.0 = true real-time, 1.5 = 1.5x real-time speed.
