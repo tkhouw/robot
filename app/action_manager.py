@@ -318,7 +318,7 @@ class ActionManager:
                 last_emit = t_start
 
                 # Physical stall supervision for relative walking
-                stall_detector = PhysicalStallDetector(timeout_s=50.0, min_displacement_m=0.03)
+                stall_detector = PhysicalStallDetector(timeout_s=6.0, min_displacement_m=0.03)
                 stalled = False
 
                 while (time.time() - t_start) < 25.0 and not self._cancel_event.is_set():
@@ -449,7 +449,7 @@ class ActionManager:
         measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to WAVEGO trot
 
         initial_dist = self._action_details.get("initial_dist_m", 1.0)
-        stall_detector = PhysicalStallDetector(timeout_s=60.0, min_displacement_m=0.04)
+        stall_detector = PhysicalStallDetector(timeout_s=6.0, min_displacement_m=0.04)
 
         # Reactive LiDAR obstacle avoidance & goal-progress-gated detour tracking
         is_detouring = False
