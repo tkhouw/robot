@@ -642,16 +642,20 @@ class ActionManager:
                 # (No strafing or diagonal skidding; head always points toward path of motion)
                 if not hasattr(self, "_is_aligning_heading"):
                     self._is_aligning_heading = False
+                    self._align_start_time = 0.0
 
-                # Hysteresis thresholds: initiate turn when error > 12 deg, exit turn when aligned within 4 deg
+                # Hysteresis thresholds: initiate turn when error > 12 deg, exit turn when aligned within 6 deg
                 align_entry_thresh = 12.0
-                align_exit_thresh = 4.0
+                align_exit_thresh = 6.0
+                min_turn_hold_s = 0.25  # Prevent rapid micro-toggling between turn and forward stride
 
                 if not self._is_aligning_heading:
                     if abs(heading_err) > align_entry_thresh and dist > 0.20:
                         self._is_aligning_heading = True
+                        self._align_start_time = time.time()
                 else:
-                    if abs(heading_err) <= align_exit_thresh:
+                    elapsed_turn = time.time() - self._align_start_time
+                    if abs(heading_err) <= align_exit_thresh and elapsed_turn >= min_turn_hold_s:
                         self._is_aligning_heading = False
 
                 if self._is_aligning_heading and dist > 0.20:

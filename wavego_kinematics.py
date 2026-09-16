@@ -279,15 +279,15 @@ class WavegoKinematics:
             self.single_gait_ctrl(2, 1.0, group_b,  direction_angle, -self.walk_extended_x, self.walk_extended_z)
             self.single_gait_ctrl(3, 1.0, group_b, -direction_angle,  self.walk_extended_x, self.walk_extended_z)
         elif turn_cmd == -1:  # Left
-            self.single_gait_ctrl(1, 1.5, group_a,  90.0,  self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(4, 1.5, group_a,  90.0, -self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(2, 1.5, group_b, -90.0, -self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(3, 1.5, group_b, -90.0,  self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(1, 0.6, group_a,  90.0,  self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(4, 0.6, group_a,  90.0, -self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(2, 0.6, group_b, -90.0, -self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(3, 0.6, group_b, -90.0,  self.walk_extended_x, self.walk_extended_z)
         elif turn_cmd == 1:   # Right
-            self.single_gait_ctrl(1, 1.5, group_a, -90.0,  self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(4, 1.5, group_a, -90.0, -self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(2, 1.5, group_b,  90.0, -self.walk_extended_x, self.walk_extended_z)
-            self.single_gait_ctrl(3, 1.5, group_b,  90.0,  self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(1, 0.6, group_a, -90.0,  self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(4, 0.6, group_a, -90.0, -self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(2, 0.6, group_b,  90.0, -self.walk_extended_x, self.walk_extended_z)
+            self.single_gait_ctrl(3, 0.6, group_b,  90.0,  self.walk_extended_x, self.walk_extended_z)
 
         return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 
@@ -328,15 +328,15 @@ class WavegoKinematics:
             self.single_gait_ctrl(2, 1.0, step_b,  direction_angle, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
             self.single_gait_ctrl(3, 1.0, step_c, -direction_angle,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
         elif turn_cmd == -1:
-            self.single_gait_ctrl(1, 1.5, step_a,  90.0,  self.walk_extended_x - a_input, self.walk_extended_z - b_input)
-            self.single_gait_ctrl(4, 1.5, step_d,  90.0, -self.walk_extended_x - a_input, self.walk_extended_z + b_input)
-            self.single_gait_ctrl(2, 1.5, step_b, -90.0, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
-            self.single_gait_ctrl(3, 1.5, step_c, -90.0,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
+            self.single_gait_ctrl(1, 0.6, step_a,  90.0,  self.walk_extended_x - a_input, self.walk_extended_z - b_input)
+            self.single_gait_ctrl(4, 0.6, step_d,  90.0, -self.walk_extended_x - a_input, self.walk_extended_z + b_input)
+            self.single_gait_ctrl(2, 0.6, step_b, -90.0, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
+            self.single_gait_ctrl(3, 0.6, step_c, -90.0,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
         elif turn_cmd == 1:
-            self.single_gait_ctrl(1, 1.5, step_a, -90.0,  self.walk_extended_x - a_input, self.walk_extended_z - b_input)
-            self.single_gait_ctrl(4, 1.5, step_d, -90.0, -self.walk_extended_x - a_input, self.walk_extended_z + b_input)
-            self.single_gait_ctrl(2, 1.5, step_b,  90.0, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
-            self.single_gait_ctrl(3, 1.5, step_c,  90.0,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
+            self.single_gait_ctrl(1, 0.6, step_a, -90.0,  self.walk_extended_x - a_input, self.walk_extended_z - b_input)
+            self.single_gait_ctrl(4, 0.6, step_d, -90.0, -self.walk_extended_x - a_input, self.walk_extended_z + b_input)
+            self.single_gait_ctrl(2, 0.6, step_b,  90.0, -self.walk_extended_x - a_input, self.walk_extended_z - b_input)
+            self.single_gait_ctrl(3, 0.6, step_c,  90.0,  self.walk_extended_x - a_input, self.walk_extended_z + b_input)
 
         return self.get_joint_angles_rad(self.goal_angles) if rad else list(self.goal_angles)
 

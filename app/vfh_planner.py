@@ -165,9 +165,9 @@ class VFHPlanner:
         # Unified Flank Clearance Guard (Body-Frame):
         # The robot's physical flanks are located at relative angles:
         # Left Flank: [+40°, +120°], Right Flank: [-120°, -40°]
-        # If an obstacle encroaches within 0.32m of either flank, turning toward that side
+        # If an obstacle encroaches within 0.20m of either flank, turning toward that side
         # would sweep the robot's rear legs/hips into the corner.
-        flank_min_clearance_m = 0.32
+        flank_min_clearance_m = 0.20
         left_flank_min = float("inf")
         right_flank_min = float("inf")
 
