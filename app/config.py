@@ -48,7 +48,7 @@ class AgentConfig(BaseSettings):
 
     # walk_range_mm: Stride reach in mm (forward/backward stroke). Tested safe range: [30.0, 55.0].
     # Values > 55.0 approach mechanical linkage singularities and cause pitch tilt.
-    walk_range_mm: float = 30.0
+    walk_range_mm: float = 50.0
 
     # walk_lift_mm: Vertical foot ground clearance in mm. Tested safe range: [8.0, 18.0].
     # Higher values provide cleaner obstacle/floor liftoff at high frequencies.
