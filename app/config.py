@@ -48,7 +48,7 @@ class AgentConfig(BaseSettings):
 
     # walk_range_mm: Stride reach in mm (forward/backward stroke). Tested safe range: [30.0, 55.0].
     # Values > 55.0 approach mechanical linkage singularities and cause pitch tilt.
-    walk_range_mm: float = 50.0
+    walk_range_mm: float = 30.0
 
     # walk_lift_mm: Vertical foot ground clearance in mm. Tested safe range: [8.0, 18.0].
     # Higher values provide cleaner obstacle/floor liftoff at high frequencies.
@@ -80,8 +80,8 @@ class AgentConfig(BaseSettings):
 
     # Vector Field Histogram (VFH) Dynamic Filter & Safety Buffer Settings
     vfh_smoothing_tau_s: float = 1.0         # Exponential smoothing time constant (seconds) for temporal density filtering
-    vfh_flank_clearance_m: float = 0.20      # Lateral flank safety buffer (distance to left/right hips)
-    vfh_safety_margin_deg: float = 15.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
+    vfh_flank_clearance_m: float = 0.10      # Lateral flank safety buffer (distance to left/right hips)
+    vfh_safety_margin_deg: float = 10.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
 
 
 config = AgentConfig()
