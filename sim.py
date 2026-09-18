@@ -522,6 +522,17 @@ class WavegoSim(BaseRobot):
                 for g in range(6):
                     viewer.opt.geomgroup[g] = 1
 
+                # Center default free-floating MuJoCo camera on the robot
+                base_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base")
+                if base_body_id >= 0:
+                    robot_xpos = self.data.xpos[base_body_id]
+                    viewer.cam.lookat[:] = [robot_xpos[0], robot_xpos[1], robot_xpos[2] + 0.05]
+                else:
+                    viewer.cam.lookat[:] = [-0.60, 0.0, 0.15]
+                viewer.cam.distance = 1.6
+                viewer.cam.azimuth = -135.0
+                viewer.cam.elevation = -20.0
+
                 sim_time_accumulator = 0.0
                 last_wall_time = time.perf_counter()
 
