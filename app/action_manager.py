@@ -513,7 +513,6 @@ class ActionManager:
         # Visual disambiguation tracking & cooldown
         last_ambiguity_time = 0.0
         ambiguity_cooldown = getattr(config, "vfh_ambiguity_cooldown_s", 12.0)
-        snap_angle_deg = getattr(config, "vfh_snapshot_turn_angle_deg", 45.0)
 
         try:
             while not self._cancel_event.is_set():
@@ -657,18 +656,10 @@ class ActionManager:
                         robot.stop()
                         robot.stand()
 
-                        # Reusable in-place pivot sequence using shared _turn_relative
-                        # In Waveshare kinematics convention: negative is Left (CCW), positive is Right (CW)
-                        # 1. Pivot Left by snap_angle_deg (-snap_angle_deg) and capture snapshot
-                        self._turn_relative(-snap_angle_deg, speed=30.0, max_duration_s=3.0)
-                        img_left_bytes = robot.get_camera_image()
-
-                        # 2. Pivot Right to +snap_angle_deg (+2 * snap_angle_deg) and capture snapshot
-                        self._turn_relative(2.0 * snap_angle_deg, speed=30.0, max_duration_s=4.5)
-                        img_right_bytes = robot.get_camera_image()
-
-                        # 3. Pivot back to original heading (-snap_angle_deg)
-                        self._turn_relative(-snap_angle_deg, speed=30.0, max_duration_s=3.0)
+                        # Instantaneous wide-camera view extraction (Option C):
+                        # Front ultra-wide 160+ deg lens captures left and right flank views simultaneously
+                        # without requiring 3 slow in-place mechanical body turns.
+                        img_left_bytes, img_right_bytes = robot.get_disambiguation_views()
 
                         # Encode frames as base64 for gateway event payload
                         b64_left = base64.b64encode(img_left_bytes).decode("utf-8") if img_left_bytes else ""

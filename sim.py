@@ -346,6 +346,39 @@ class WavegoSim(BaseRobot):
         img.save(buf, format="PNG")
         return buf.getvalue()
 
+    def get_disambiguation_views(
+        self, width: int = 320, height: int = 240
+    ) -> Tuple[bytes, bytes]:
+        """
+        Captures Left and Right corridor views instantaneously using the front ultra-wide camera lens.
+        Renders a single 640x240 wide-angle frame (spanning ~162 deg FOV), then splits and unwarps
+        it into Left view (columns looking left) and Right view (columns looking right).
+        Zero mechanical delay, zero chassis or neck movement required.
+        """
+        import io
+        from PIL import Image
+
+        wide_frame = self._render_camera_safe("front_camera", width=640, height=height)
+
+        # In MuJoCo optical axes:
+        # Camera X-axis points in robot's -Y (right).
+        # Therefore:
+        # Columns [0 : 320] capture the RIGHT flank/corridor (-60 deg to -80 deg).
+        # Columns [320 : 640] capture the LEFT flank/corridor (+60 deg to +80 deg).
+        right_crop = wide_frame[:, :320]
+        left_crop = wide_frame[:, 320:]
+
+        left_img = Image.fromarray(left_crop).resize((width, height), Image.Resampling.BILINEAR)
+        right_img = Image.fromarray(right_crop).resize((width, height), Image.Resampling.BILINEAR)
+
+        buf_l = io.BytesIO()
+        left_img.save(buf_l, format="PNG")
+
+        buf_r = io.BytesIO()
+        right_img.save(buf_r, format="PNG")
+
+        return buf_l.getvalue(), buf_r.getvalue()
+
     def get_jpeg_frame(
         self, camera_name: str = "tracking_cam", width: int = 480, height: int = 360, quality: int = 75
     ) -> bytes:

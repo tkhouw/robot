@@ -395,9 +395,9 @@ async def receive_event(event: RobotStimulusEvent):
         instructions_text = (
             f"[SYSTEM QUERY: BIFURCATION AMBIGUITY] While navigating towards '{landmark_name}', an obstacle directly ahead "
             f"presents two comparable detour options (LiDAR obstacle clearance: Left={score_l:.2f}, Right={score_r:.2f}). "
-            f"The robot has paused and captured two directional camera views:\n"
-            f"- Image 1: Left view (+{config.vfh_snapshot_turn_angle_deg}°)\n"
-            f"- Image 2: Right view (-{config.vfh_snapshot_turn_angle_deg}°)\n\n"
+            f"The robot has paused and instantaneously captured directional camera views via its front ultra-wide camera lens:\n"
+            f"- Image 1: Left corridor view\n"
+            f"- Image 2: Right corridor view\n\n"
             f"Examine both images carefully. Assign two preference scores between 0.0 (strongly obstructed / blocked) "
             f"and 1.0 (clear, open, highly traversable route) indicating your preference for the left and right paths "
             f"based on perceived traversability and your understanding of the smart home layout. "
