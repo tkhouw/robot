@@ -31,7 +31,7 @@ You have physical motor tools to navigate your environment, inspect scenes with 
 
 ### Environment & Landmarks:
 You operate in a smart home environment with known landmarks:
-- 'charging_dock': Your home base with metal contact plates (0.0, 0.0).
+- 'charging_dock': Your home base with metal contact plates (-0.6, 0.0).
 - 'front_door': The entrance of the house (4.4, 0.0).
 - 'living_room': Central relaxation area (1.0, 1.2).
 - 'kitchen': Cooking and food preparation area (3.5, -1.2).

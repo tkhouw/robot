@@ -129,8 +129,8 @@
     </body>
 
     <!-- ==================== 55-INCH WIDESCREEN TV & MEDIA CONSOLE ==================== -->
-    <!-- Positioned facing the sofa: center at (1.10, -0.20) -->
-    <body name="media_center" pos="1.10 -0.20 0">
+    <!-- Positioned facing the sofa: center at (0.50, -0.20) -->
+    <body name="media_center" pos="0.50 -0.20 0">
       <!-- Low Media Console Table (H = 0.36m, Length = 1.40m, Depth = 0.35m) -->
       <geom name="tv_stand" type="box" size="0.70 0.18 0.18" pos="0 0 0.18" material="wood_oak"/>
       <!-- TV Pedestal base -->
