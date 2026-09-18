@@ -211,13 +211,9 @@ async def event_processor_loop():
         await broadcast_queue_state()
 
         try:
-            # Enforce an overall 15s timeout per stimulus turn, plus a safety step cap
-            step_count = 0
-            MAX_STEPS_PER_TURN = 4
-
-            async with asyncio.timeout(15.0):
+            # Enforce an overall 20s timeout per stimulus turn; bounds are natively enforced by ADK max_llm_calls
+            async with asyncio.timeout(20.0):
                 async for adk_event in runtime.execute_prompt(prompt_text):
-                    step_count += 1
                     event_dict = adk_event.model_dump(mode="json", exclude_none=True)
 
                     # Extract tool calls and responses via ADK methods
@@ -236,12 +232,9 @@ async def event_processor_loop():
 
                     await broadcast_sse("agent_adk_event", event_dict)
 
-                    if step_count >= MAX_STEPS_PER_TURN:
-                        break
-
         except TimeoutError:
-            print("[AGENT TIMEOUT] Turn exceeded 15s timeout limit; concluding turn and releasing queue.")
-            await broadcast_sse("agent_error", {"error": "Turn timed out after 15s; proceeding to next event."})
+            print("[AGENT TIMEOUT] Turn exceeded timeout limit; concluding turn and releasing queue.")
+            await broadcast_sse("agent_error", {"error": "Turn timed out; proceeding to next event."})
         except Exception as e:
             print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})

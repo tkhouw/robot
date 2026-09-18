@@ -3,6 +3,7 @@ from typing import Any, AsyncGenerator, List, Optional, Union
 import openai
 import google.genai.types as types
 from google.adk.agents import Agent
+from google.adk.agents.run_config import RunConfig
 from google.adk.events import Event as AdkEvent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -279,10 +280,12 @@ class QuadrupedCognitiveRuntime:
             role="user",
             parts=parts,
         )
+        run_config = RunConfig(max_llm_calls=config.agent_max_llm_calls)
         async for event in self.runner.run_async(
             user_id=self.user_id,
             session_id=self.session_id,
             new_message=new_msg,
+            run_config=run_config,
         ):
             yield event
 

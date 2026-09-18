@@ -15,6 +15,8 @@ class AgentConfig(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Default to DeepSeek multimodal vision model
     model_name: str = "deepseek/deepseek-v4-flash-vision-exp"
+    # Maximum LLM inference rounds allowed per stimulus turn (ADK native safeguard)
+    agent_max_llm_calls: int = 5
 
     @field_validator("openrouter_api_key")
     @classmethod
