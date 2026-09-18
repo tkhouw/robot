@@ -244,6 +244,8 @@ class ActionManager:
             "eta_s": eta,
         }
         self.progress_pct = 0.0
+        if hasattr(self, "_vfh_planner") and self._vfh_planner is not None:
+            self._vfh_planner.reset()
 
         self._thread = threading.Thread(
             target=self._navigation_worker,
@@ -569,18 +571,21 @@ class ActionManager:
                 # Initialize or reuse VFH Planner
                 if not hasattr(self, "_vfh_planner") or self._vfh_planner is None:
                     self._vfh_planner = VFHPlanner(
-                        num_bins=72,
+                        num_bins=getattr(config, "lidar_num_samples", 72),
                         safe_distance_m=obstacle_dist_thresh,
                         emergency_stop_m=emergency_stop_thresh,
-                        density_threshold_high=0.15,
-                        density_threshold_low=0.06,
+                        density_threshold_high=getattr(config, "vfh_density_threshold_high", 0.15),
+                        density_threshold_low=getattr(config, "vfh_density_threshold_low", 0.06),
+                        weight_goal=getattr(config, "vfh_weight_goal", 2.0),
+                        weight_current_heading=getattr(config, "vfh_weight_current_heading", 0.5),
+                        weight_prev_steering=getattr(config, "vfh_weight_prev_steering", 1.0),
                         robot_radius_m=0.18,
                         smoothing_tau_s=getattr(config, "vfh_smoothing_tau_s", 1.0),
-                        flank_clearance_m=getattr(config, "vfh_flank_clearance_m", 0.16),
-                        safety_margin_deg=getattr(config, "vfh_safety_margin_deg", 25.0),
-                        ambiguity_threshold=getattr(config, "vfh_ambiguity_threshold", 0.15),
+                        flank_clearance_m=getattr(config, "vfh_flank_clearance_m", 0.10),
+                        safety_margin_deg=getattr(config, "vfh_safety_margin_deg", 10.0),
+                        ambiguity_threshold=getattr(config, "vfh_ambiguity_threshold", 0.05),
                         visual_bias_weight=getattr(config, "vfh_visual_bias_weight", 2.5),
-                        visual_bias_decay_s=getattr(config, "vfh_visual_bias_decay_s", 8.0),
+                        visual_bias_decay_s=getattr(config, "vfh_visual_bias_decay_s", 5.0),
                     )
 
                 vfh_result = None

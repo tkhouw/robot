@@ -82,12 +82,19 @@ class AgentConfig(BaseSettings):
     vfh_smoothing_tau_s: float = 1.0         # Exponential smoothing time constant (seconds) for temporal density filtering
     vfh_flank_clearance_m: float = 0.10      # Lateral flank safety buffer (distance to left/right hips)
     vfh_safety_margin_deg: float = 10.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
+    vfh_density_threshold_high: float = 0.15 # Density threshold to enter detour mode
+    vfh_density_threshold_low: float = 0.06  # Density threshold to exit detour mode / identify valleys
+
+    # VFH Candidate Heading Selection Weights
+    vfh_weight_goal: float = 2.0             # Weight favoring candidate valleys aligned with goal landmark
+    vfh_weight_current_heading: float = 0.5  # Weight favoring current body orientation
+    vfh_weight_prev_steering: float = 1.0    # Momentum/damping weight penalizing changes from previous steering direction (lower = more agile)
 
     # VFH Visual Disambiguation & Exponential Bias Decay
     vfh_ambiguity_threshold: float = 0.05    # Trigger threshold for |Left_Score - Right_Score| under which obstacle is ambiguous
     vfh_snapshot_turn_angle_deg: float = 65.0 # In-place pivot angle in degrees for capturing left and right snapshots
-    vfh_ambiguity_cooldown_s: float = 60.0   # Cooldown period (seconds) before another visual disambiguation can trigger
-    vfh_visual_bias_weight: float = 20.5      # Cost function weight multiplier for agent's visual preference
-    vfh_visual_bias_decay_s: float = 100.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
+    vfh_ambiguity_cooldown_s: float = 30.0   # Cooldown period (seconds) before another visual disambiguation can trigger
+    vfh_visual_bias_weight: float = 2.5      # Cost function weight multiplier for agent's visual preference
+    vfh_visual_bias_decay_s: float = 5.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
 
 config = AgentConfig()
