@@ -540,12 +540,17 @@ async def video_stream(request: Request, cam: str = "tracking_cam"):
             while not await request.is_disconnected():
                 robot = get_robot()
                 if hasattr(robot, "get_jpeg_frame"):
+                    # Front camera uses widescreen 640x320 (2:1 aspect ratio) matched to ultra-wide lens
+                    # 3rd-person spectator camera uses standard 480x360 (4:3 aspect ratio)
+                    s_width = 640 if cam == "front_camera" else 480
+                    s_height = 320 if cam == "front_camera" else 360
+
                     # Offload OpenGL rendering to dedicated single-worker thread to eliminate X11 BadAccess
                     render_call = functools.partial(
                         robot.get_jpeg_frame,
                         camera_name=cam,
-                        width=480,
-                        height=360,
+                        width=s_width,
+                        height=s_height,
                         quality=75,
                     )
                     frame_bytes = await loop.run_in_executor(render_executor, render_call)

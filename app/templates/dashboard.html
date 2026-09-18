@@ -1246,6 +1246,14 @@
       document.getElementById('mjpegStream').src = `/video/stream?cam=${camName}&t=${Date.now()}`;
       document.getElementById('btnTrackingCam').classList.toggle('active', camName === 'tracking_cam');
       document.getElementById('btnFrontCam').classList.toggle('active', camName === 'front_camera');
+      const wrapper = document.querySelector('.video-wrapper');
+      if (wrapper) {
+        if (camName === 'front_camera') {
+          wrapper.style.height = '320px';
+        } else {
+          wrapper.style.height = '460px';
+        }
+      }
     }
 
     function setServerOffline(reason) {
