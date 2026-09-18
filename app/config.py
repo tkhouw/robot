@@ -93,10 +93,11 @@ class AgentConfig(BaseSettings):
     vfh_weight_prev_steering: float = 1.0    # Momentum/damping weight penalizing changes from previous steering direction (lower = more agile)
 
     # VFH Visual Disambiguation & Exponential Bias Decay
-    vfh_ambiguity_threshold: float = 0.05    # Trigger threshold for |Left_Score - Right_Score| under which obstacle is ambiguous
+    vfh_ambiguity_threshold: float = 0.25    # Trigger threshold for |Left_Score - Right_Score| under which obstacle is ambiguous
+    vfh_bifurcation_min_divergence_deg: float = 60.0 # Minimum angular divergence between left and right candidates to qualify as bifurcation
     vfh_snapshot_turn_angle_deg: float = 65.0 # In-place pivot angle in degrees for capturing left and right snapshots
     vfh_ambiguity_cooldown_s: float = 30.0   # Cooldown period (seconds) before another visual disambiguation can trigger
-    vfh_visual_bias_weight: float = 2.5      # Cost function weight multiplier for agent's visual preference
-    vfh_visual_bias_decay_s: float = 5.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
+    vfh_visual_bias_weight: float = 15.5      # Cost function weight multiplier for agent's visual preference
+    vfh_visual_bias_decay_s: float = 10.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
 
 config = AgentConfig()

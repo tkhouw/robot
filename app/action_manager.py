@@ -583,6 +583,7 @@ class ActionManager:
                         flank_clearance_m=getattr(config, "vfh_flank_clearance_m", 0.10),
                         safety_margin_deg=getattr(config, "vfh_safety_margin_deg", 10.0),
                         ambiguity_threshold=getattr(config, "vfh_ambiguity_threshold", 0.05),
+                        bifurcation_min_divergence_deg=getattr(config, "vfh_bifurcation_min_divergence_deg", 60.0),
                         visual_bias_weight=getattr(config, "vfh_visual_bias_weight", 2.5),
                         visual_bias_decay_s=getattr(config, "vfh_visual_bias_decay_s", 5.0),
                     )
