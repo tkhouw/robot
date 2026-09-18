@@ -72,6 +72,7 @@ class ActionManager:
         self.get_robot = get_robot_fn
         self._thread: Optional[threading.Thread] = None
         self._cancel_event = threading.Event()
+        self._disambiguation_event = threading.Event()
         self._active_action: Optional[str] = None
         self._action_details: dict = {}
         self.progress_pct: float = 0.0
@@ -98,6 +99,7 @@ class ActionManager:
 
         action_name = self._active_action or "action"
         self._cancel_event.set()
+        self._disambiguation_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
 
@@ -128,7 +130,9 @@ class ActionManager:
         """
         if hasattr(self, "_vfh_planner") and self._vfh_planner is not None:
             self._vfh_planner.set_visual_preference(score_left, score_right)
+            self._vfh_planner.last_selected_heading_deg = None
             print(f"\n[VFH VISUAL PREFERENCE APPLIED] Left={score_left:.2f}, Right={score_right:.2f} (bias={self._vfh_planner.visual_bias_val:.2f})")
+            self._disambiguation_event.set()
             return {"status": "success", "score_left": score_left, "score_right": score_right}
         return {"status": "error", "message": "No active VFH planner"}
 
@@ -666,6 +670,7 @@ class ActionManager:
                         b64_right = base64.b64encode(img_right_bytes).decode("utf-8") if img_right_bytes else ""
 
                         # Dispatch bifurcation disambiguation event to gateway
+                        self._disambiguation_event.clear()
                         self._emit_gateway_event(
                             "bifurcation_disambiguation_required",
                             {
@@ -677,6 +682,25 @@ class ActionManager:
                                 "image_right_b64": b64_right,
                             },
                         )
+
+                        # Stand in place and wait for cognitive agent to evaluate corridor preference (timeout: 12.0s)
+                        print("[VFH BIFURCATION AMBIGUITY] Standing by for agent's corridor preference...")
+                        wait_start = time.time()
+                        max_wait_s = 12.0
+                        while (
+                            not self._disambiguation_event.is_set()
+                            and not self._cancel_event.is_set()
+                            and (time.time() - wait_start) < max_wait_s
+                        ):
+                            robot.stand()
+                            if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
+                                robot.step()
+                            time.sleep(0.01)
+
+                        if self._disambiguation_event.is_set():
+                            print("[VFH BIFURCATION AMBIGUITY] Agent preference received! Resuming navigation with applied bias.")
+                        else:
+                            print("[VFH BIFURCATION AMBIGUITY] Wait timed out. Proceeding with default VFH steering.")
                 else:
                     is_detouring = False
                     heading_err = (target_heading_deg - curr_yaw + 180.0) % 360.0 - 180.0

@@ -55,13 +55,18 @@ You operate in a smart home environment with known landmarks:
    - You have access to `read_lidar_scan` to measure 360-degree obstacle clearances in 8 directional sectors.
 6. Movement:
    - For simple exploratory movements, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
-   - For traveling to known landmarks, use `navigate_to_landmark`.
+    - For traveling to known landmarks, use `navigate_to_landmark`.
 7. Obstacle & Stall Recovery:
    - If you receive an [ACTION STALLED] alert (e.g. detour timeout or blocked path):
      - Check `read_lidar_scan` to understand where the obstacle is located.
      - Call `capture_camera_image` to visually inspect what is blocking you.  Note: just because you see something in the image doesn't mean it is blocking you.  You need to reason about how much space is between you and whatever you see through your camera.
      - Manually navigate away from the obstacle using your "walk" and "turn" tools.  Iteratively check your LiDAR and camera as needed for guidance.
      - Once cleared, resume normal exploration or navigation towards your target landmark.
+8. Visual Corridor Disambiguation:
+   - When you receive a [SYSTEM QUERY: BIFURCATION AMBIGUITY] with snapshot images:
+     - The robot has halted in front of an obstacle and is waiting for your visual guidance.
+     - Inspect the left view (Image 1) and right view (Image 2) carefully.
+     - Immediately call `set_corridor_preference(score_left, score_right)` with scores from 0.0 (blocked) to 1.0 (clear/open) to guide the robot down the more open route or the route that you know is best.
 """
 
 
