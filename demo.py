@@ -10,7 +10,6 @@ Run this script with:
 
 import sys
 import threading
-import time
 from sim import WavegoSim
 
 

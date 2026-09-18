@@ -1,5 +1,5 @@
-import os
-from typing import Any, AsyncGenerator, Optional
+import time
+from typing import Any, AsyncGenerator, List, Optional, Union
 import openai
 import google.genai.types as types
 from google.adk.agents import Agent
@@ -22,6 +22,7 @@ from app.tools import (
     announce_message,
     read_telemetry,
     read_lidar_scan,
+    set_corridor_preference,
 )
 
 SYSTEM_INSTRUCTION = """You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
@@ -74,7 +75,6 @@ class MultimodalToolOpenAILlm(OpenAILlm):
         self, llm_request, stream: bool = False
     ) -> AsyncGenerator[Any, None]:
         import base64
-        import json
         from google.adk.labs.openai._openai_llm import _content_to_openai_messages
 
         messages = []
@@ -218,51 +218,61 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
             announce_message,
             read_telemetry,
             read_lidar_scan,
+            set_corridor_preference,
         ],
     )
     return agent
 
 
 class QuadrupedCognitiveRuntime:
-    """
-    Manages the ADK Agent, session persistence, and asynchronous turn dispatching.
-    """
+    """Manages continuous session execution, history, and tool dispatching."""
 
     def __init__(self, agent: Optional[Agent] = None):
-        self.app_name = "wavego_quadruped_app"
         self.agent = agent or create_agent()
+        self.app_name = "quadruped_agent_app"
+        self.user_id = "domestic_owner"
+        self.session_id = f"session_{int(time.time())}"
+        self._session_initialized = False
         self.session_service = InMemorySessionService()
         self.runner = Runner(
             app_name=self.app_name,
             agent=self.agent,
             session_service=self.session_service,
         )
-        self.user_id = "wavego_user"
-        self.session_id = "default_wavego_session"
 
     async def init_session(self):
-        """Initializes the session in the session service if it does not exist."""
-        sess = await self.session_service.get_session(
-            app_name=self.app_name,
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
-        if not sess:
-            await self.session_service.create_session(
+        """Ensures the agent session exists in the session service."""
+        if not self._session_initialized:
+            sess = await self.session_service.get_session(
                 app_name=self.app_name,
                 user_id=self.user_id,
                 session_id=self.session_id,
             )
+            if not sess:
+                await self.session_service.create_session(
+                    app_name=self.app_name,
+                    user_id=self.user_id,
+                    session_id=self.session_id,
+                )
+            self._session_initialized = True
 
-    async def execute_prompt(self, user_prompt: str) -> AsyncGenerator[AdkEvent, None]:
+    async def execute_prompt(
+        self, user_prompt: Union[str, List[types.Part]]
+    ) -> AsyncGenerator[AdkEvent, None]:
         """
         Executes a turn in the ADK agent, yielding native Google ADK Event objects
         containing structured actions, tool calls, and model outputs.
+        Accepts either plain text string or list of types.Part (for multimodal text + images).
         """
         await self.init_session()
+        if isinstance(user_prompt, str):
+            parts = [types.Part.from_text(text=user_prompt)]
+        else:
+            parts = user_prompt
+
         new_msg = types.Content(
             role="user",
-            parts=[types.Part.from_text(text=user_prompt)],
+            parts=parts,
         )
         async for event in self.runner.run_async(
             user_id=self.user_id,

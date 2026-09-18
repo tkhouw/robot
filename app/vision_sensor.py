@@ -103,7 +103,7 @@ class PassiveMotionDetector:
                                 self.on_motion_callback(diff)
 
                     self._prev_frame = curr_frame
-                except Exception as e:
+                except Exception:
                     pass
 
             elapsed = time.time() - start_t

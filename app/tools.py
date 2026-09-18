@@ -320,3 +320,32 @@ def read_lidar_scan() -> Dict[str, Any]:
         "status": "unavailable",
         "description": "LiDAR sensor is not available or not connected.",
     }
+
+
+def set_corridor_preference(
+    score_left: float,
+    score_right: float,
+    tool_context: Optional[ToolContext] = None,
+) -> str:
+    """
+    Sets the robot's directional preference between left and right corridors when circumventing an obstacle.
+    Both score_left and score_right must be float values between 0.0 (strongly obstructed / undesirable)
+    and 1.0 (completely open / highly desirable).
+    This establishes an exponentially decaying bias in the robot's real-time Vector Field Histogram (VFH) planner.
+    """
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
+    score_left = max(0.0, min(1.0, float(score_left)))
+    score_right = max(0.0, min(1.0, float(score_right)))
+
+    mgr = get_action_manager()
+    res = mgr.submit_visual_disambiguation_scores(score_left, score_right)
+    if res.get("status") == "success":
+        favored = "Left" if score_left > score_right else ("Right" if score_right > score_left else "Balanced")
+        return (
+            f"Successfully applied visual corridor preference: Left={score_left:.2f}, Right={score_right:.2f}. "
+            f"Favored corridor: {favored}. VFH planner guidance updated."
+        )
+    return "No active navigation or VFH planner found to apply preference."
+

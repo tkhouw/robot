@@ -15,8 +15,6 @@ import numpy as np
 from wavego_kinematics import (
     WavegoKinematics,
     STAND_HEIGHT,
-    WALK_HEIGHT_MIN,
-    WALK_HEIGHT_MAX,
 )
 
 from robot_interface import BaseRobot
