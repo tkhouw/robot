@@ -327,7 +327,15 @@ class WavegoSim(BaseRobot):
         if self.has_active_viewer and self._viewer_thread_id is not None and current_tid != self._viewer_thread_id:
             res_queue: queue.Queue = queue.Queue()
             self._render_queue.put((camera_name, width, height, res_queue))
-            return res_queue.get(timeout=3.0)
+            try:
+                res = res_queue.get(timeout=5.0)
+                if isinstance(res, Exception):
+                    print(f"[SIM WARN] Offscreen camera render failed on viewer thread: {res}")
+                    return np.zeros((height, width, 3), dtype=np.uint8)
+                return res
+            except queue.Empty:
+                print(f"[SIM WARN] Camera render timed out for '{camera_name}' (5.0s). Returning fallback frame.")
+                return np.zeros((height, width, 3), dtype=np.uint8)
         return self._render_camera_raw(camera_name, width, height)
 
     def get_camera_image(
@@ -522,12 +530,13 @@ class WavegoSim(BaseRobot):
                     while not self._render_queue.empty():
                         try:
                             req_cam, req_w, req_h, req_q = self._render_queue.get_nowait()
-                            frame = self._render_camera_raw(req_cam, req_w, req_h)
-                            req_q.put(frame)
+                            try:
+                                frame = self._render_camera_raw(req_cam, req_w, req_h)
+                                req_q.put(frame)
+                            except Exception as render_err:
+                                req_q.put(render_err)
                         except queue.Empty:
                             break
-                        except Exception as e:
-                            req_q.put_exception(e) if hasattr(req_q, 'put_exception') else None
 
                     now_wall = time.perf_counter()
                     dt_wall = min(now_wall - last_wall_time, 0.1)  # Cap against pause freezes
