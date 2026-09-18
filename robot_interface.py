@@ -16,9 +16,6 @@ from wavego_protocol import (
     CMD_SINGLE_LEG_CTRL,
     FUNC_STAY_LOW,
     FUNC_HANDSHAKE,
-    FUNC_JUMP,
-    FUNC_STEADY_ON,
-    FUNC_STEADY_OFF,
     parse_cmd,
     format_cmd,
 )

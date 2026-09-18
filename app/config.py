@@ -83,5 +83,12 @@ class AgentConfig(BaseSettings):
     vfh_flank_clearance_m: float = 0.10      # Lateral flank safety buffer (distance to left/right hips)
     vfh_safety_margin_deg: float = 10.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
 
+    # VFH Visual Disambiguation & Exponential Bias Decay
+    vfh_ambiguity_threshold: float = 0.05    # Trigger threshold for |Left_Score - Right_Score| under which obstacle is ambiguous
+    vfh_snapshot_turn_angle_deg: float = 45.0 # In-place pivot angle in degrees for capturing left and right snapshots
+    vfh_ambiguity_cooldown_s: float = 60.0   # Cooldown period (seconds) before another visual disambiguation can trigger
+    vfh_visual_bias_weight: float = 2.5      # Cost function weight multiplier for agent's visual preference
+    vfh_visual_bias_decay_s: float = 10.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
+
 
 config = AgentConfig()

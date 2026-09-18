@@ -5,6 +5,7 @@ dedicated background worker thread, emitting real-time progress and completion
 events to the gateway without blocking the cognitive agent.
 """
 
+import base64
 import math
 import time
 import threading
@@ -119,6 +120,17 @@ class ActionManager:
         )
 
         return {"status": "cancelled", "action": action_name}
+
+    def submit_visual_disambiguation_scores(self, score_left: float, score_right: float):
+        """
+        Applies the agent's visual preference scores to the active VFH planner.
+        This sets an exponential decaying bias towards the favored corridor.
+        """
+        if hasattr(self, "_vfh_planner") and self._vfh_planner is not None:
+            self._vfh_planner.set_visual_preference(score_left, score_right)
+            print(f"\n[VFH VISUAL PREFERENCE APPLIED] Left={score_left:.2f}, Right={score_right:.2f} (bias={self._vfh_planner.visual_bias_val:.2f})")
+            return {"status": "success", "score_left": score_left, "score_right": score_right}
+        return {"status": "error", "message": "No active VFH planner"}
 
     def start_relative_motion(
         self,
@@ -246,8 +258,66 @@ class ActionManager:
         }
 
     # -------------------------------------------------------------------------
-    # Worker Implementations
+    # Worker Implementations & Motion Primitives
     # -------------------------------------------------------------------------
+
+    def _turn_relative(
+        self,
+        turn_degrees: float,
+        speed: float = 35.0,
+        progress_callback: Optional[Callable[[float], None]] = None,
+        max_duration_s: Optional[float] = None,
+    ) -> float:
+        """
+        Reusable in-place relative rotation primitive using IMU yaw integration.
+        Turns by turn_degrees (positive = clockwise/right, negative = counter-clockwise/left).
+        Returns actual unwrapped degrees turned.
+        """
+        if abs(turn_degrees) < 0.5 or self._cancel_event.is_set():
+            return 0.0
+
+        robot = self.get_robot()
+        start_rpy = robot.get_imu()
+        prev_yaw = start_rpy[2]
+        unwrapped_turn = 0.0
+        target_yaw_diff = abs(turn_degrees)
+
+        turn_dir = speed if turn_degrees > 0 else -speed
+        robot.walk(0.0, turn_dir)
+
+        if max_duration_s is None:
+            max_duration_s = max(10.0, (target_yaw_diff / 10.0) + 4.0)
+
+        t_start = time.time()
+        while (time.time() - t_start) < max_duration_s and not self._cancel_event.is_set():
+            if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
+                robot.step()
+            time.sleep(0.002)
+
+            curr_yaw = robot.get_imu()[2]
+            delta = curr_yaw - prev_yaw
+            while delta > 180.0:
+                delta -= 360.0
+            while delta < -180.0:
+                delta += 360.0
+
+            unwrapped_turn += delta
+            prev_yaw = curr_yaw
+
+            if progress_callback:
+                pct = min(99.0, round((abs(unwrapped_turn) / target_yaw_diff) * 100.0, 1))
+                progress_callback(pct)
+
+            if abs(unwrapped_turn) >= target_yaw_diff:
+                break
+
+        robot.stand()
+        if not getattr(robot, "has_active_viewer", False):
+            for _ in range(30):
+                if hasattr(robot, "step"):
+                    robot.step()
+
+        return unwrapped_turn
 
     def _relative_motion_worker(
         self,
@@ -258,39 +328,16 @@ class ActionManager:
         robot = self.get_robot()
         try:
             start_pos, _ = robot.get_pose()
-            start_rpy = robot.get_imu()
-            initial_yaw = start_rpy[2]
 
-            # 1. In-place rotation
+            # 1. In-place rotation using shared _turn_relative primitive
             if abs(turn_degrees) > 1.0 and not self._cancel_event.is_set():
-                turn_dir = 35.0 if turn_degrees > 0 else -35.0
-                robot.walk(0.0, turn_dir)
-                target_yaw_diff = abs(turn_degrees)
-                max_turn_time = max(15.0, (target_yaw_diff / 10.0) + 5.0)
-                t_start = time.time()
-                last_emit = t_start
-                unwrapped_turn = 0.0
-                prev_yaw = initial_yaw
+                last_emit = [time.time()]
 
-                while (time.time() - t_start) < max_turn_time and not self._cancel_event.is_set():
-                    if hasattr(robot, "step") and not getattr(robot, "has_active_viewer", False):
-                        robot.step()
-                    time.sleep(0.002)
-
-                    curr_yaw = robot.get_imu()[2]
-                    delta = curr_yaw - prev_yaw
-                    while delta > 180.0:
-                        delta -= 360.0
-                    while delta < -180.0:
-                        delta += 360.0
-
-                    unwrapped_turn += delta
-                    prev_yaw = curr_yaw
-                    self.progress_pct = min(99.0, round((abs(unwrapped_turn) / target_yaw_diff) * 100.0, 1))
-
+                def on_turn_progress(pct: float):
+                    self.progress_pct = pct
                     now = time.time()
-                    if (now - last_emit) >= 0.25:
-                        last_emit = now
+                    if (now - last_emit[0]) >= 0.25:
+                        last_emit[0] = now
                         self._emit_gateway_event(
                             "action_progress",
                             {
@@ -300,14 +347,11 @@ class ActionManager:
                             },
                         )
 
-                    if abs(unwrapped_turn) >= target_yaw_diff:
-                        break
-
-                robot.stand()
-                if not getattr(robot, "has_active_viewer", False):
-                    for _ in range(50):
-                        if hasattr(robot, "step"):
-                            robot.step()
+                self._turn_relative(
+                    turn_degrees=turn_degrees,
+                    speed=35.0,
+                    progress_callback=on_turn_progress,
+                )
 
             # 2. Linear motion
             if abs(distance_meters) > 0.01 and not self._cancel_event.is_set():
@@ -460,6 +504,11 @@ class ActionManager:
         obstacle_dist_thresh = getattr(config, "lidar_obstacle_distance_m", 0.45)
         emergency_stop_thresh = getattr(config, "lidar_emergency_stop_m", 0.16)
 
+        # Visual disambiguation tracking & cooldown
+        last_ambiguity_time = 0.0
+        ambiguity_cooldown = getattr(config, "vfh_ambiguity_cooldown_s", 12.0)
+        snap_angle_deg = getattr(config, "vfh_snapshot_turn_angle_deg", 45.0)
+
         try:
             while not self._cancel_event.is_set():
                 curr_pos, _ = robot.get_pose()
@@ -517,14 +566,17 @@ class ActionManager:
                 if not hasattr(self, "_vfh_planner") or self._vfh_planner is None:
                     self._vfh_planner = VFHPlanner(
                         num_bins=72,
-                        safe_distance_m=getattr(config, "lidar_obstacle_distance_m", 0.40),
-                        emergency_stop_m=getattr(config, "lidar_emergency_stop_m", 0.10),
+                        safe_distance_m=obstacle_dist_thresh,
+                        emergency_stop_m=emergency_stop_thresh,
                         density_threshold_high=0.15,
                         density_threshold_low=0.06,
                         robot_radius_m=0.18,
                         smoothing_tau_s=getattr(config, "vfh_smoothing_tau_s", 1.0),
                         flank_clearance_m=getattr(config, "vfh_flank_clearance_m", 0.16),
                         safety_margin_deg=getattr(config, "vfh_safety_margin_deg", 25.0),
+                        ambiguity_threshold=getattr(config, "vfh_ambiguity_threshold", 0.15),
+                        visual_bias_weight=getattr(config, "vfh_visual_bias_weight", 2.5),
+                        visual_bias_decay_s=getattr(config, "vfh_visual_bias_decay_s", 8.0),
                     )
 
                 vfh_result = None
@@ -572,7 +624,59 @@ class ActionManager:
                         "chosen_heading_deg": chosen_heading,
                         "heading_error_deg": heading_err,
                         "target_heading_deg": round(float(target_heading_deg), 1),
+                        "score_left": vfh_result.get("score_left", 0.0),
+                        "score_right": vfh_result.get("score_right", 0.0),
+                        "is_ambiguous": vfh_result.get("is_ambiguous", False),
+                        "active_visual_bias": vfh_result.get("active_visual_bias", 0.0),
                     }
+
+                    # Bifurcation Ambiguity Routine:
+                    # When obstacle head-on presents equally open left & right corridors,
+                    # pause forward walk, pivot to left snapshot angle, take photo, pivot to right snapshot angle, take photo,
+                    # return to heading, and notify cognitive agent to evaluate corridor traversability.
+                    if (
+                        is_detouring
+                        and vfh_result.get("is_ambiguous", False)
+                        and (now - last_ambiguity_time) >= ambiguity_cooldown
+                        and not self._cancel_event.is_set()
+                    ):
+                        last_ambiguity_time = now
+                        score_l = vfh_result.get("score_left", 0.0)
+                        score_r = vfh_result.get("score_right", 0.0)
+                        print(f"\n[VFH BIFURCATION AMBIGUITY] Left score={score_l:.2f}, Right score={score_r:.2f} (|diff| <= {config.vfh_ambiguity_threshold})! Initiating visual snapshot routine...")
+
+                        robot.stop()
+                        robot.stand()
+
+                        # Reusable in-place pivot sequence using shared _turn_relative
+                        # In Waveshare kinematics convention: negative is Left (CCW), positive is Right (CW)
+                        # 1. Pivot Left by snap_angle_deg (-snap_angle_deg) and capture snapshot
+                        self._turn_relative(-snap_angle_deg, speed=30.0, max_duration_s=3.0)
+                        img_left_bytes = robot.get_camera_image()
+
+                        # 2. Pivot Right to +snap_angle_deg (+2 * snap_angle_deg) and capture snapshot
+                        self._turn_relative(2.0 * snap_angle_deg, speed=30.0, max_duration_s=4.5)
+                        img_right_bytes = robot.get_camera_image()
+
+                        # 3. Pivot back to original heading (-snap_angle_deg)
+                        self._turn_relative(-snap_angle_deg, speed=30.0, max_duration_s=3.0)
+
+                        # Encode frames as base64 for gateway event payload
+                        b64_left = base64.b64encode(img_left_bytes).decode("utf-8") if img_left_bytes else ""
+                        b64_right = base64.b64encode(img_right_bytes).decode("utf-8") if img_right_bytes else ""
+
+                        # Dispatch bifurcation disambiguation event to gateway
+                        self._emit_gateway_event(
+                            "bifurcation_disambiguation_required",
+                            {
+                                "landmark": landmark_name,
+                                "current_pos": [round(curr_x, 3), round(curr_y, 3)],
+                                "score_left": score_l,
+                                "score_right": score_r,
+                                "image_left_b64": b64_left,
+                                "image_right_b64": b64_right,
+                            },
+                        )
                 else:
                     is_detouring = False
                     heading_err = (target_heading_deg - curr_yaw + 180.0) % 360.0 - 180.0
