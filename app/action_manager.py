@@ -98,6 +98,7 @@ class ActionManager:
             return {"status": "idle", "message": "No active action to cancel."}
 
         action_name = self._active_action or "action"
+        action_details = dict(self._action_details) if self._action_details else {}
         self._cancel_event.set()
         self._disambiguation_event.set()
         if self._thread and self._thread.is_alive():
@@ -111,17 +112,13 @@ class ActionManager:
         robot.stop()
         robot.stand()
 
-        # Emit cancellation event to gateway
-        self._emit_gateway_event(
-            "action_cancelled",
-            {"action": action_name},
-        )
+        # Emit UI progress event so dashboard progress card cleanly closes
         self._emit_gateway_event(
             "action_progress",
             {"action": action_name, "progress_pct": 100.0, "status": "cancelled"},
         )
 
-        return {"status": "cancelled", "action": action_name}
+        return {"status": "cancelled", "action": action_name, "details": action_details}
 
     def submit_visual_disambiguation_scores(self, score_left: float, score_right: float):
         """

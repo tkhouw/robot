@@ -197,14 +197,25 @@ def navigate_to_landmark(landmark_name: str, tool_context: Optional[ToolContext]
 
 def stop_action(tool_context: Optional[ToolContext] = None) -> str:
     """Immediately halt the robot and cancel any active movement, navigation, or gesture."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-
+    # Do NOT set skip_summarization = True here: halting is an immediate, synchronous operation
+    # and the agent may immediately issue a succeeding action (e.g. navigating to greet a guest).
     mgr = get_action_manager()
     res = mgr.cancel_action()
     if res.get("status") == "idle":
-        return "Robot is already stopped."
-    return f"Emergency stop executed: '{res.get('action')}' cancelled. Robot brought to a safe stand."
+        return "Robot is already stopped and standing safely."
+
+    action_name = res.get("action", "action")
+    details = res.get("details", {})
+    if action_name == "navigate_to_landmark" and "landmark" in details:
+        desc = f"Navigation toward '{details['landmark']}'"
+    elif action_name in ("walk_forward", "walk_backward") and "distance_m" in details:
+        desc = f"{action_name} ({details['distance_m']:.2f}m)"
+    elif action_name in ("turn_left", "turn_right") and "turn_degrees" in details:
+        desc = f"{action_name} ({details['turn_degrees']:.1f}°)"
+    else:
+        desc = f"Action '{action_name}'"
+
+    return f"Emergency stop executed: {desc} cancelled. Robot is standing safely."
 
 
 def return_to_charging_dock(tool_context: Optional[ToolContext] = None) -> str:

@@ -126,7 +126,7 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press, action_completed, action_stalled, action_cancelled (Action completions & alerts)
+    1: doorbell_press, action_completed, action_stalled (Action completions & alerts)
     2: action_progress (Normal action progress feedback)
     3: motion_detected, passive camera alert, generic sensor events
     """
@@ -136,7 +136,6 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
         "doorbell_press",
         "action_completed",
         "action_stalled",
-        "action_cancelled",
         "bifurcation_disambiguation_required",
     ):
         return 1
@@ -419,10 +418,6 @@ async def receive_event(event: RobotStimulusEvent):
                 print(f"[GATEWAY] Failed decoding right snapshot: {e}")
 
         agent_prompt = parts
-
-    elif event.event_type == "action_cancelled":
-        action_name = event.payload.get("action", "action")
-        agent_prompt = f"[SYSTEM EVENT: ACTION CANCELLED] Action '{action_name}' was cancelled. Robot is safely standing."
 
     elif event.source == "nest_doorbell" and event.event_type == "doorbell_press":
         person_name = event.payload.get("person_name")
