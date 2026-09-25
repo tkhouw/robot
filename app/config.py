@@ -77,7 +77,7 @@ class AgentConfig(BaseSettings):
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0
     lidar_obstacle_distance_m: float = 0.60  # Distance threshold to initiate detour circumvention
-    lidar_emergency_stop_m: float = 0.10     # Hard collision stop buffer
+    lidar_emergency_stop_m: float = 0.15     # Hard collision stop buffer
     lidar_detour_timeout_s: float = 120.0     # Time off-track navigating around obstacle before waking agent
 
     # Vector Field Histogram (VFH) Dynamic Filter & Safety Buffer Settings
