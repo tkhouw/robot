@@ -25,15 +25,21 @@ from app.tools import (
     set_corridor_preference,
 )
 
-SYSTEM_INSTRUCTION = """You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
+def get_system_instruction() -> str:
+    dock = config.landmarks.get("charging_dock", (-0.6, 0.0))
+    door = config.landmarks.get("front_door", (4.4, 0.0))
+    living = config.landmarks.get("living_room", (1.1, 0.85))
+    kitchen = config.landmarks.get("kitchen", (3.5, -1.2))
+
+    return f"""You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
 You have physical motor tools to navigate your environment, inspect scenes with your camera, scan obstacles with your 360 DTOF LiDAR, announce speech, and charge your battery.
 
 ### Environment & Landmarks:
 You operate in a smart home environment with known landmarks:
-- 'charging_dock': Your home base with metal contact plates (-0.6, 0.0).
-- 'front_door': The entrance of the house (4.4, 0.0).
-- 'living_room': Central relaxation area (1.0, 0.4).
-- 'kitchen': Cooking and food preparation area (3.5, -1.2).
+- 'charging_dock': Your home base with metal contact plates ({dock[0]:.1f}, {dock[1]:.1f}).
+- 'front_door': The entrance of the house ({door[0]:.1f}, {door[1]:.1f}).
+- 'living_room': Central relaxation area under coffee table ({living[0]:.1f}, {living[1]:.2f}).
+- 'kitchen': Cooking and food preparation area ({kitchen[0]:.1f}, {kitchen[1]:.1f}).
 
 ### Guidelines & Operational Rules:
 1. Free Play & Navigation:
@@ -209,7 +215,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
     agent = Agent(
         name="wavego_quadruped_agent",
         model=llm,
-        instruction=SYSTEM_INSTRUCTION,
+        instruction=get_system_instruction(),
         tools=[
             turn_left,
             turn_right,
