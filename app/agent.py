@@ -1,8 +1,9 @@
-import os
-from typing import Any, AsyncGenerator, Optional
+import time
+from typing import Any, AsyncGenerator, List, Optional, Union
 import openai
 import google.genai.types as types
 from google.adk.agents import Agent
+from google.adk.agents.run_config import RunConfig
 from google.adk.events import Event as AdkEvent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -22,6 +23,7 @@ from app.tools import (
     announce_message,
     read_telemetry,
     read_lidar_scan,
+    set_corridor_preference,
 )
 
 SYSTEM_INSTRUCTION = """You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
@@ -29,7 +31,7 @@ You have physical motor tools to navigate your environment, inspect scenes with 
 
 ### Environment & Landmarks:
 You operate in a smart home environment with known landmarks:
-- 'charging_dock': Your home base with metal contact plates (0.0, 0.0).
+- 'charging_dock': Your home base with metal contact plates (-0.6, 0.0).
 - 'front_door': The entrance of the house (4.4, 0.0).
 - 'living_room': Central relaxation area (1.0, 1.2).
 - 'kitchen': Cooking and food preparation area (3.5, -1.2).
@@ -54,13 +56,18 @@ You operate in a smart home environment with known landmarks:
    - You have access to `read_lidar_scan` to measure 360-degree obstacle clearances in 8 directional sectors.
 6. Movement:
    - For simple exploratory movements, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
-   - For traveling to known landmarks, use `navigate_to_landmark`.
+    - For traveling to known landmarks, use `navigate_to_landmark`.
 7. Obstacle & Stall Recovery:
    - If you receive an [ACTION STALLED] alert (e.g. detour timeout or blocked path):
      - Check `read_lidar_scan` to understand where the obstacle is located.
      - Call `capture_camera_image` to visually inspect what is blocking you.  Note: just because you see something in the image doesn't mean it is blocking you.  You need to reason about how much space is between you and whatever you see through your camera.
      - Manually navigate away from the obstacle using your "walk" and "turn" tools.  Iteratively check your LiDAR and camera as needed for guidance.
      - Once cleared, resume normal exploration or navigation towards your target landmark.
+8. Visual Corridor Disambiguation:
+   - When you receive a [SYSTEM QUERY: BIFURCATION AMBIGUITY] with snapshot images:
+     - The robot has halted in front of an obstacle and is waiting for your visual guidance.
+     - Inspect the left view (Image 1) and right view (Image 2) carefully.
+     - Immediately call `set_corridor_preference(score_left, score_right)` with scores from 0.0 (blocked) to 1.0 (clear/open) to guide the robot down the more open route or the route that you know is best.
 """
 
 
@@ -74,7 +81,6 @@ class MultimodalToolOpenAILlm(OpenAILlm):
         self, llm_request, stream: bool = False
     ) -> AsyncGenerator[Any, None]:
         import base64
-        import json
         from google.adk.labs.openai._openai_llm import _content_to_openai_messages
 
         messages = []
@@ -218,56 +224,68 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
             announce_message,
             read_telemetry,
             read_lidar_scan,
+            set_corridor_preference,
         ],
     )
     return agent
 
 
 class QuadrupedCognitiveRuntime:
-    """
-    Manages the ADK Agent, session persistence, and asynchronous turn dispatching.
-    """
+    """Manages continuous session execution, history, and tool dispatching."""
 
     def __init__(self, agent: Optional[Agent] = None):
-        self.app_name = "wavego_quadruped_app"
         self.agent = agent or create_agent()
+        self.app_name = "quadruped_agent_app"
+        self.user_id = "domestic_owner"
+        self.session_id = f"session_{int(time.time())}"
+        self._session_initialized = False
         self.session_service = InMemorySessionService()
         self.runner = Runner(
             app_name=self.app_name,
             agent=self.agent,
             session_service=self.session_service,
         )
-        self.user_id = "wavego_user"
-        self.session_id = "default_wavego_session"
 
     async def init_session(self):
-        """Initializes the session in the session service if it does not exist."""
-        sess = await self.session_service.get_session(
-            app_name=self.app_name,
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
-        if not sess:
-            await self.session_service.create_session(
+        """Ensures the agent session exists in the session service."""
+        if not self._session_initialized:
+            sess = await self.session_service.get_session(
                 app_name=self.app_name,
                 user_id=self.user_id,
                 session_id=self.session_id,
             )
+            if not sess:
+                await self.session_service.create_session(
+                    app_name=self.app_name,
+                    user_id=self.user_id,
+                    session_id=self.session_id,
+                )
+            self._session_initialized = True
 
-    async def execute_prompt(self, user_prompt: str) -> AsyncGenerator[AdkEvent, None]:
+    async def execute_prompt(
+        self, user_prompt: Union[str, List[types.Part]]
+    ) -> AsyncGenerator[AdkEvent, None]:
         """
         Executes a turn in the ADK agent, yielding native Google ADK Event objects
         containing structured actions, tool calls, and model outputs.
+        Accepts either plain text string or list of types.Part (for multimodal text + images).
         """
         await self.init_session()
+        if isinstance(user_prompt, str):
+            parts = [types.Part.from_text(text=user_prompt)]
+        else:
+            parts = user_prompt
+
         new_msg = types.Content(
             role="user",
-            parts=[types.Part.from_text(text=user_prompt)],
+            parts=parts,
         )
+        run_config = RunConfig(max_llm_calls=config.agent_max_llm_calls)
         async for event in self.runner.run_async(
             user_id=self.user_id,
             session_id=self.session_id,
             new_message=new_msg,
+            run_config=run_config,
         ):
             yield event
 

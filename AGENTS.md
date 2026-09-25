@@ -33,9 +33,14 @@ This provides the user with necessary context to review, approve, or reject prop
 - Instead, the agent should directly ask the user to run `uv run python demo.py` and describe what they see in the interactive viewer.
 - The user has superior visual comprehension to evaluate mechanical poses, contact, and gaits; relying on user visual feedback conserves context and prevents wasting tokens.
 
+## 5. Pre-Verification Linting Rule
+- Before asking for human verification of changes that you make, the agent must ALWAYS lint the code using:
+  `uv run flake8 --select=F <files or app/>`
+- Make any needed changes to fix undefined names (`F821`), invalid syntax (`F7xx`/`F9xx`), or import errors before asking the user to run or test the code.
+
 ---
 
-## 5. Project Architecture
+## 6. Project Architecture
 - **Robot Model**: Authentic WAVEGO Pro quadruped robot with 4-bar parallel closed-loop kinematic leg mechanisms.
 - **Model Files**:
   - `models/wavego/wavego.xml`: 4-bar linkage MJCF model with `<equality><connect>` constraints and 12 position servos.
@@ -44,3 +49,4 @@ This provides the user with necessary context to review, approve, or reject prop
 - **Kinematics & Control**:
   - `wavego_kinematics.py`: Direct port of Waveshare `BodyCtrl.cpp` closed-form IK, wiggle plane IK, and triangular crawl gait.
   - `sim.py`: MuJoCo simulation interface wrapping 12-servo control and official JSON command handlers.
+

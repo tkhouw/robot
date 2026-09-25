@@ -197,14 +197,25 @@ def navigate_to_landmark(landmark_name: str, tool_context: Optional[ToolContext]
 
 def stop_action(tool_context: Optional[ToolContext] = None) -> str:
     """Immediately halt the robot and cancel any active movement, navigation, or gesture."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-
+    # Do NOT set skip_summarization = True here: halting is an immediate, synchronous operation
+    # and the agent may immediately issue a succeeding action (e.g. navigating to greet a guest).
     mgr = get_action_manager()
     res = mgr.cancel_action()
     if res.get("status") == "idle":
-        return "Robot is already stopped."
-    return f"Emergency stop executed: '{res.get('action')}' cancelled. Robot brought to a safe stand."
+        return "Robot is already stopped and standing safely."
+
+    action_name = res.get("action", "action")
+    details = res.get("details", {})
+    if action_name == "navigate_to_landmark" and "landmark" in details:
+        desc = f"Navigation toward '{details['landmark']}'"
+    elif action_name in ("walk_forward", "walk_backward") and "distance_m" in details:
+        desc = f"{action_name} ({details['distance_m']:.2f}m)"
+    elif action_name in ("turn_left", "turn_right") and "turn_degrees" in details:
+        desc = f"{action_name} ({details['turn_degrees']:.1f}°)"
+    else:
+        desc = f"Action '{action_name}'"
+
+    return f"Emergency stop executed: {desc} cancelled. Robot is standing safely."
 
 
 def return_to_charging_dock(tool_context: Optional[ToolContext] = None) -> str:
@@ -320,3 +331,32 @@ def read_lidar_scan() -> Dict[str, Any]:
         "status": "unavailable",
         "description": "LiDAR sensor is not available or not connected.",
     }
+
+
+def set_corridor_preference(
+    score_left: float,
+    score_right: float,
+    tool_context: Optional[ToolContext] = None,
+) -> str:
+    """
+    Sets the robot's directional preference between left and right corridors when circumventing an obstacle.
+    Both score_left and score_right must be float values between 0.0 (strongly obstructed / undesirable)
+    and 1.0 (completely open / highly desirable).
+    This establishes an exponentially decaying bias in the robot's real-time Vector Field Histogram (VFH) planner.
+    """
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
+    score_left = max(0.0, min(1.0, float(score_left)))
+    score_right = max(0.0, min(1.0, float(score_right)))
+
+    mgr = get_action_manager()
+    res = mgr.submit_visual_disambiguation_scores(score_left, score_right)
+    if res.get("status") == "success":
+        favored = "Left" if score_left > score_right else ("Right" if score_right > score_left else "Balanced")
+        return (
+            f"Successfully applied visual corridor preference: Left={score_left:.2f}, Right={score_right:.2f}. "
+            f"Favored corridor: {favored}. VFH planner guidance updated."
+        )
+    return "No active navigation or VFH planner found to apply preference."
+

@@ -6,8 +6,9 @@ with the official Waveshare BodyCtrl kinematics and JSON command interface.
 
 import math
 import time
+import queue
 import threading
-from typing import Dict, Any, Tuple, Union, List
+from typing import Dict, Any, Tuple, Union, List, Optional
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -15,8 +16,6 @@ import numpy as np
 from wavego_kinematics import (
     WavegoKinematics,
     STAND_HEIGHT,
-    WALK_HEIGHT_MIN,
-    WALK_HEIGHT_MAX,
 )
 
 from robot_interface import BaseRobot
@@ -81,6 +80,9 @@ class WavegoSim(BaseRobot):
         # Thread safety lock & persistent renderer cache to prevent GLFW context recreation crashes
         self._lock = threading.Lock()
         self._renderers: Dict[tuple, mujoco.Renderer] = {}
+        self._render_queue: queue.Queue = queue.Queue()
+        self._viewer_thread_id: Optional[int] = None
+        self.has_active_viewer: bool = False
 
         # Cache robot-specific and environment geom IDs for X-Ray silhouette rendering
         self._robot_geom_ids = set()
@@ -282,6 +284,60 @@ class WavegoSim(BaseRobot):
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
+    def _render_camera_raw(self, camera_name: str, width: int, height: int) -> np.ndarray:
+        """Internal helper to render RGB array from camera model. Must be called in OpenGL thread."""
+        with self._lock:
+            renderer = self._get_renderer(width, height)
+            renderer.update_scene(self.data, camera=camera_name)
+            rgb_array = renderer.render()
+
+            # For top-down spectator camera, guarantee robot visibility with high-visibility outline
+            if camera_name == "tracking_cam" and self._robot_geom_ids:
+                try:
+                    import scipy.ndimage
+                    env_indices = list(self._env_geom_ids)
+                    orig_alpha = self.model.geom_rgba[env_indices, 3].copy()
+                    self.model.geom_rgba[env_indices, 3] = 0.0
+
+                    renderer.enable_segmentation_rendering()
+                    renderer.update_scene(self.data, camera=camera_name)
+                    seg = renderer.render()
+                    renderer.disable_segmentation_rendering()
+
+                    self.model.geom_rgba[env_indices, 3] = orig_alpha
+
+                    robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
+                    if np.any(robot_mask):
+                        dilated = scipy.ndimage.binary_dilation(robot_mask, iterations=2)
+                        outline = dilated & ~robot_mask
+                        rgb_array = rgb_array.copy()
+                        rgb_array[outline] = [0, 235, 255]
+                except Exception:
+                    pass
+
+            return rgb_array
+
+    def _render_camera_safe(self, camera_name: str, width: int, height: int) -> np.ndarray:
+        """
+        Thread-safe camera render dispatcher.
+        If interactive 3D viewer is running on another thread, dispatches request to viewer thread
+        to prevent fatal GLX BadAccess OpenGL context collision.
+        """
+        current_tid = threading.get_ident()
+        if self.has_active_viewer and self._viewer_thread_id is not None and current_tid != self._viewer_thread_id:
+            res_queue: queue.Queue = queue.Queue()
+            self._render_queue.put((camera_name, width, height, res_queue))
+            try:
+                res = res_queue.get(timeout=5.0)
+                if isinstance(res, Exception):
+                    print(f"[SIM WARN] Offscreen camera render failed on viewer thread: {res}")
+                    return np.zeros((height, width, 3), dtype=np.uint8)
+                return res
+            except queue.Empty:
+                print(f"[SIM WARN] Camera render timed out for '{camera_name}' (5.0s). Returning fallback frame.")
+                return np.zeros((height, width, 3), dtype=np.uint8)
+        return self._render_camera_raw(camera_name, width, height)
+
     def get_camera_image(
         self, width: int = 320, height: int = 240, camera_name: str = "front_camera"
     ) -> bytes:
@@ -292,43 +348,44 @@ class WavegoSim(BaseRobot):
         import io
         from PIL import Image
 
-        with self._lock:
-            renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name)
-            rgb_array = renderer.render()
-
-            # For top-down spectator camera, guarantee robot visibility with high-visibility outline
-            if camera_name == "tracking_cam" and self._robot_geom_ids:
-                try:
-                    import scipy.ndimage
-                    # Pass 2: segmentation pass with environment alpha zeroed to reveal occluded robot
-                    env_indices = list(self._env_geom_ids)
-                    orig_alpha = self.model.geom_rgba[env_indices, 3].copy()
-                    self.model.geom_rgba[env_indices, 3] = 0.0
-
-                    renderer.enable_segmentation_rendering()
-                    renderer.update_scene(self.data, camera=camera_name)
-                    seg = renderer.render()
-                    renderer.disable_segmentation_rendering()
-
-                    # Restore environment alpha
-                    self.model.geom_rgba[env_indices, 3] = orig_alpha
-
-                    # Find robot pixels
-                    robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
-                    if np.any(robot_mask):
-                        dilated = scipy.ndimage.binary_dilation(robot_mask, iterations=2)
-                        outline = dilated & ~robot_mask
-                        rgb_array = rgb_array.copy()
-                        # Draw glowing bright cyan/teal tracking outline (0, 235, 255)
-                        rgb_array[outline] = [0, 235, 255]
-                except Exception:
-                    pass
-
+        rgb_array = self._render_camera_safe(camera_name, width, height)
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()
+
+    def get_disambiguation_views(
+        self, width: int = 320, height: int = 240
+    ) -> Tuple[bytes, bytes]:
+        """
+        Captures Left and Right corridor views instantaneously using the front ultra-wide camera lens.
+        Renders a single 640x240 wide-angle frame (spanning ~162 deg FOV), then splits and unwarps
+        it into Left view (columns looking left) and Right view (columns looking right).
+        Zero mechanical delay, zero chassis or neck movement required.
+        """
+        import io
+        from PIL import Image
+
+        wide_frame = self._render_camera_safe("front_camera", width=640, height=height)
+
+        # In MuJoCo optical axes:
+        # Camera X-axis points in robot's -Y (right).
+        # Therefore:
+        # Columns [0 : 320] capture the RIGHT flank/corridor (-60 deg to -80 deg).
+        # Columns [320 : 640] capture the LEFT flank/corridor (+60 deg to +80 deg).
+        right_crop = wide_frame[:, :320]
+        left_crop = wide_frame[:, 320:]
+
+        left_img = Image.fromarray(left_crop).resize((width, height), Image.Resampling.BILINEAR)
+        right_img = Image.fromarray(right_crop).resize((width, height), Image.Resampling.BILINEAR)
+
+        buf_l = io.BytesIO()
+        left_img.save(buf_l, format="PNG")
+
+        buf_r = io.BytesIO()
+        right_img.save(buf_r, format="PNG")
+
+        return buf_l.getvalue(), buf_r.getvalue()
 
     def get_jpeg_frame(
         self, camera_name: str = "tracking_cam", width: int = 480, height: int = 360, quality: int = 75
@@ -340,35 +397,7 @@ class WavegoSim(BaseRobot):
         import io
         from PIL import Image
 
-        with self._lock:
-            renderer = self._get_renderer(width, height)
-            renderer.update_scene(self.data, camera=camera_name)
-            rgb_array = renderer.render()
-
-            # For top-down spectator camera, guarantee robot visibility with high-visibility outline
-            if camera_name == "tracking_cam" and self._robot_geom_ids:
-                try:
-                    import scipy.ndimage
-                    env_indices = list(self._env_geom_ids)
-                    orig_alpha = self.model.geom_rgba[env_indices, 3].copy()
-                    self.model.geom_rgba[env_indices, 3] = 0.0
-
-                    renderer.enable_segmentation_rendering()
-                    renderer.update_scene(self.data, camera=camera_name)
-                    seg = renderer.render()
-                    renderer.disable_segmentation_rendering()
-
-                    self.model.geom_rgba[env_indices, 3] = orig_alpha
-
-                    robot_mask = np.isin(seg[:, :, 0], list(self._robot_geom_ids))
-                    if np.any(robot_mask):
-                        dilated = scipy.ndimage.binary_dilation(robot_mask, iterations=2)
-                        outline = dilated & ~robot_mask
-                        rgb_array = rgb_array.copy()
-                        rgb_array[outline] = [0, 235, 255]
-                except Exception:
-                    pass
-
+        rgb_array = self._render_camera_safe(camera_name, width, height)
         img = Image.fromarray(rgb_array)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=quality)
@@ -481,6 +510,7 @@ class WavegoSim(BaseRobot):
         time_warp = getattr(config, "sim_time_warp", 1.0)
         last_render_time = time.time()
         self.has_active_viewer = True
+        self._viewer_thread_id = threading.get_ident()
 
         try:
             with self._lock:
@@ -492,10 +522,33 @@ class WavegoSim(BaseRobot):
                 for g in range(6):
                     viewer.opt.geomgroup[g] = 1
 
+                # Center default free-floating MuJoCo camera on the robot
+                base_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base")
+                if base_body_id >= 0:
+                    robot_xpos = self.data.xpos[base_body_id]
+                    viewer.cam.lookat[:] = [robot_xpos[0], robot_xpos[1], robot_xpos[2] + 0.05]
+                else:
+                    viewer.cam.lookat[:] = [-0.60, 0.0, 0.15]
+                viewer.cam.distance = 1.6
+                viewer.cam.azimuth = -135.0
+                viewer.cam.elevation = -20.0
+
                 sim_time_accumulator = 0.0
                 last_wall_time = time.perf_counter()
 
                 while viewer.is_running():
+                    # Fulfill any offscreen camera render requests safely on OpenGL/viewer thread
+                    while not self._render_queue.empty():
+                        try:
+                            req_cam, req_w, req_h, req_q = self._render_queue.get_nowait()
+                            try:
+                                frame = self._render_camera_raw(req_cam, req_w, req_h)
+                                req_q.put(frame)
+                            except Exception as render_err:
+                                req_q.put(render_err)
+                        except queue.Empty:
+                            break
+
                     now_wall = time.perf_counter()
                     dt_wall = min(now_wall - last_wall_time, 0.1)  # Cap against pause freezes
                     last_wall_time = now_wall
@@ -519,3 +572,4 @@ class WavegoSim(BaseRobot):
                     time.sleep(0.001)
         finally:
             self.has_active_viewer = False
+            self._viewer_thread_id = None

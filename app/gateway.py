@@ -5,6 +5,7 @@ and voice/text commands, streaming agent reasoning via Server-Sent Events (SSE).
 """
 
 import asyncio
+import base64
 import functools
 import json
 import time
@@ -13,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
+from google.genai import types as genai_types
 from pydantic import BaseModel
 
 from app.agent import QuadrupedCognitiveRuntime
@@ -66,6 +68,19 @@ def log_event_audit(event_type: str, source: str, priority: int, status: str, de
     recent_event_audit = recent_event_audit[:15]
 
 
+def format_prompt_display(prompt: Any) -> str:
+    """Formats prompts into clean, JSON-serializable strings for UI and SSE display."""
+    if isinstance(prompt, list):
+        text_parts = [p.text for p in prompt if hasattr(p, "text") and p.text]
+        non_text_count = sum(1 for p in prompt if not (hasattr(p, "text") and p.text))
+        combined_text = "\n".join(text_parts) if text_parts else ""
+        if non_text_count > 0:
+            suffix = f"\n[+{non_text_count} non-text part{'s' if non_text_count > 1 else ''} attached]"
+            return combined_text + suffix if combined_text else suffix.strip()
+        return combined_text
+    return str(prompt)
+
+
 async def broadcast_queue_state():
     """Broadcasts current snapshot of active task, queued events, and recent audit log."""
     items = []
@@ -77,7 +92,7 @@ async def broadcast_queue_state():
             items.append({
                 "priority": priority,
                 "counter": counter,
-                "prompt": prompt,
+                "prompt": format_prompt_display(prompt),
                 "source": meta.get("source", "unknown"),
                 "event_type": meta.get("event_type", "unknown"),
                 "timestamp": meta.get("timestamp", time.time()),
@@ -85,10 +100,16 @@ async def broadcast_queue_state():
     except Exception:
         pass
 
+    formatted_active = None
+    if active_task:
+        formatted_active = dict(active_task)
+        if "prompt" in formatted_active:
+            formatted_active["prompt"] = format_prompt_display(formatted_active["prompt"])
+
     state_payload = {
         "is_busy": is_agent_busy,
         "queue_size": event_queue.qsize(),
-        "active_task": active_task,
+        "active_task": formatted_active,
         "queued_events": items,
         "recent_audit": recent_event_audit,
     }
@@ -105,13 +126,18 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     """
     Returns numeric priority (lower value = higher priority).
     0: user_message (Immediate human command/query)
-    1: doorbell_press, action_completed, action_stalled, action_cancelled (Action completions & alerts)
+    1: doorbell_press, action_completed, action_stalled (Action completions & alerts)
     2: action_progress (Normal action progress feedback)
     3: motion_detected, passive camera alert, generic sensor events
     """
     if event.event_type == "user_message":
         return 0
-    if event.event_type in ("doorbell_press", "action_completed", "action_stalled", "action_cancelled"):
+    if event.event_type in (
+        "doorbell_press",
+        "action_completed",
+        "action_stalled",
+        "bifurcation_disambiguation_required",
+    ):
         return 1
     if event.event_type == "action_progress":
         return 2
@@ -139,7 +165,7 @@ def check_debounce(event: RobotStimulusEvent) -> bool:
 
 async def broadcast_sse(event_type: str, data: Any):
     """Pushes a message to all active SSE browser connections."""
-    message = json.dumps({"type": event_type, "data": data, "timestamp": time.time()})
+    message = json.dumps({"type": event_type, "data": data, "timestamp": time.time()}, default=str)
     for q in list(sse_subscribers):
         try:
             await q.put(message)
@@ -167,17 +193,26 @@ async def event_processor_loop():
         if motion_sensor:
             motion_sensor.suppress_motion_detection = True
 
-        await broadcast_sse("agent_turn_start", {"priority": priority, "prompt": prompt_text})
+        # Format human-readable prompt string for SSE streaming
+        prompt_display = prompt_text
+        if isinstance(prompt_text, list):
+            # Extract and join all text parts for full UI display and append non-text parts count
+            text_parts = [p.text for p in prompt_text if hasattr(p, "text") and p.text]
+            non_text_count = sum(1 for p in prompt_text if not (hasattr(p, "text") and p.text))
+            combined_text = "\n".join(text_parts) if text_parts else ""
+            if non_text_count > 0:
+                suffix = f"\n[+{non_text_count} non-text part{'s' if non_text_count > 1 else ''} attached]"
+                prompt_display = combined_text + suffix if combined_text else suffix.strip()
+            else:
+                prompt_display = combined_text
+
+        await broadcast_sse("agent_turn_start", {"priority": priority, "prompt": prompt_display})
         await broadcast_queue_state()
 
         try:
-            # Enforce an overall 15s timeout per stimulus turn, plus a safety step cap
-            step_count = 0
-            MAX_STEPS_PER_TURN = 4
-
-            async with asyncio.timeout(15.0):
+            # Enforce an overall 20s timeout per stimulus turn; bounds are natively enforced by ADK max_llm_calls
+            async with asyncio.timeout(20.0):
                 async for adk_event in runtime.execute_prompt(prompt_text):
-                    step_count += 1
                     event_dict = adk_event.model_dump(mode="json", exclude_none=True)
 
                     # Extract tool calls and responses via ADK methods
@@ -197,8 +232,8 @@ async def event_processor_loop():
                     await broadcast_sse("agent_adk_event", event_dict)
 
         except TimeoutError:
-            print(f"[AGENT TIMEOUT] Turn exceeded 15s timeout limit; concluding turn and releasing queue.")
-            await broadcast_sse("agent_error", {"error": "Turn timed out after 15s; proceeding to next event."})
+            print("[AGENT TIMEOUT] Turn exceeded timeout limit; concluding turn and releasing queue.")
+            await broadcast_sse("agent_error", {"error": "Turn timed out; proceeding to next event."})
         except Exception as e:
             print(f"[AGENT ERROR]: {e}")
             await broadcast_sse("agent_error", {"error": str(e)})
@@ -349,9 +384,40 @@ async def receive_event(event: RobotStimulusEvent):
             f"and navigate around the blockage."
         )
 
-    elif event.event_type == "action_cancelled":
-        action_name = event.payload.get("action", "action")
-        agent_prompt = f"[SYSTEM EVENT: ACTION CANCELLED] Action '{action_name}' was cancelled. Robot is safely standing."
+    elif event.event_type == "bifurcation_disambiguation_required":
+        landmark_name = event.payload.get("landmark", "target landmark")
+        score_l = event.payload.get("score_left", 0.5)
+        score_r = event.payload.get("score_right", 0.5)
+        b64_l = event.payload.get("image_left_b64", "")
+        b64_r = event.payload.get("image_right_b64", "")
+
+        instructions_text = (
+            f"[SYSTEM QUERY: BIFURCATION AMBIGUITY] While navigating towards '{landmark_name}', an obstacle directly ahead "
+            f"presents two comparable detour options (LiDAR obstacle clearance: Left={score_l:.2f}, Right={score_r:.2f}). "
+            f"The robot has paused and instantaneously captured directional camera views via its front ultra-wide camera lens:\n"
+            f"- Image 1: Left corridor view\n"
+            f"- Image 2: Right corridor view\n\n"
+            f"Examine both images carefully. Assign two preference scores between 0.0 (strongly obstructed / blocked) "
+            f"and 1.0 (clear, open, highly traversable route) indicating your preference for the left and right paths "
+            f"based on perceived traversability and your understanding of the smart home layout. "
+            f"Call `set_corridor_preference(score_left, score_right)` with your scores."
+        )
+
+        parts: List[genai_types.Part] = [genai_types.Part.from_text(text=instructions_text)]
+        if b64_l:
+            try:
+                img_l_bytes = base64.b64decode(b64_l)
+                parts.append(genai_types.Part.from_bytes(data=img_l_bytes, mime_type="image/jpeg"))
+            except Exception as e:
+                print(f"[GATEWAY] Failed decoding left snapshot: {e}")
+        if b64_r:
+            try:
+                img_r_bytes = base64.b64decode(b64_r)
+                parts.append(genai_types.Part.from_bytes(data=img_r_bytes, mime_type="image/jpeg"))
+            except Exception as e:
+                print(f"[GATEWAY] Failed decoding right snapshot: {e}")
+
+        agent_prompt = parts
 
     elif event.source == "nest_doorbell" and event.event_type == "doorbell_press":
         person_name = event.payload.get("person_name")
@@ -386,12 +452,26 @@ async def receive_event(event: RobotStimulusEvent):
     }
     await event_queue.put((priority, _queue_counter, agent_prompt, meta))
     log_event_audit(event.event_type, event.source, priority, "enqueued", detail="Added to priority queue")
+
+    # Serialize prompt safely for SSE broadcast and HTTP response if it contains Part objects
+    if isinstance(agent_prompt, list):
+        text_pieces = [p.text for p in agent_prompt if hasattr(p, "text") and p.text]
+        non_text_count = sum(1 for p in agent_prompt if not (hasattr(p, "text") and p.text))
+        combined_text = "\n".join(text_pieces) if text_pieces else ""
+        if non_text_count > 0:
+            suffix = f"\n[+{non_text_count} non-text part{'s' if non_text_count > 1 else ''} attached]"
+            prompt_summary = combined_text + suffix if combined_text else suffix.strip()
+        else:
+            prompt_summary = combined_text
+    else:
+        prompt_summary = str(agent_prompt)
+
     await broadcast_sse(
         "event_received",
-        {"source": event.source, "event_type": event.event_type, "priority": priority, "prompt": agent_prompt},
+        {"source": event.source, "event_type": event.event_type, "priority": priority, "prompt": prompt_summary},
     )
     await broadcast_queue_state()
-    return {"status": "enqueued", "priority": priority, "event_type": event.event_type, "prompt": agent_prompt}
+    return {"status": "enqueued", "priority": priority, "event_type": event.event_type, "prompt": prompt_summary}
 
 
 @app.get("/events/stream")
@@ -455,12 +535,17 @@ async def video_stream(request: Request, cam: str = "tracking_cam"):
             while not await request.is_disconnected():
                 robot = get_robot()
                 if hasattr(robot, "get_jpeg_frame"):
+                    # Front camera uses widescreen 640x320 (2:1 aspect ratio) matched to ultra-wide lens
+                    # 3rd-person spectator camera uses standard 480x360 (4:3 aspect ratio)
+                    s_width = 640 if cam == "front_camera" else 480
+                    s_height = 320 if cam == "front_camera" else 360
+
                     # Offload OpenGL rendering to dedicated single-worker thread to eliminate X11 BadAccess
                     render_call = functools.partial(
                         robot.get_jpeg_frame,
                         camera_name=cam,
-                        width=480,
-                        height=360,
+                        width=s_width,
+                        height=s_height,
                         quality=75,
                     )
                     frame_bytes = await loop.run_in_executor(render_executor, render_call)

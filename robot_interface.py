@@ -16,9 +16,6 @@ from wavego_protocol import (
     CMD_SINGLE_LEG_CTRL,
     FUNC_STAY_LOW,
     FUNC_HANDSHAKE,
-    FUNC_JUMP,
-    FUNC_STEADY_ON,
-    FUNC_STEADY_OFF,
     parse_cmd,
     format_cmd,
 )
@@ -61,6 +58,18 @@ class BaseRobot(ABC):
         Returns None if camera hardware/stream is unavailable or not connected.
         """
         return None
+
+    def get_disambiguation_views(
+        self, width: int = 320, height: int = 240
+    ) -> Tuple[Optional[bytes], Optional[bytes]]:
+        """
+        Captures Left and Right corridor views for visual disambiguation.
+        For an ultra-wide angle camera (160+ deg FOV), extracts both views from a single
+        instantaneous capture without requiring mechanical chassis/neck turns.
+        Returns (left_png_bytes, right_png_bytes).
+        """
+        img = self.get_camera_image(width=width, height=height)
+        return (img, img)
 
     def get_lidar_scan(
         self, num_samples: int = 72, max_range: float = 12.0

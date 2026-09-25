@@ -15,6 +15,8 @@ class AgentConfig(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Default to DeepSeek multimodal vision model
     model_name: str = "deepseek/deepseek-v4-flash-vision-exp"
+    # Maximum LLM inference rounds allowed per stimulus turn (ADK native safeguard)
+    agent_max_llm_calls: int = 5
 
     @field_validator("openrouter_api_key")
     @classmethod
@@ -35,7 +37,7 @@ class AgentConfig(BaseSettings):
 
     # Known Domestic Landmarks (x, y coordinates in meters)
     landmarks: Dict[str, Tuple[float, float]] = {
-        "charging_dock": (0.0, 0.0),
+        "charging_dock": (-0.6, 0.0),
         "front_door": (4.4, 0.0),
         "living_room": (1.0, 1.2),
         "kitchen": (3.5, -1.2),
@@ -75,13 +77,27 @@ class AgentConfig(BaseSettings):
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0
     lidar_obstacle_distance_m: float = 0.60  # Distance threshold to initiate detour circumvention
-    lidar_emergency_stop_m: float = 0.10     # Hard collision stop buffer
+    lidar_emergency_stop_m: float = 0.15     # Hard collision stop buffer
     lidar_detour_timeout_s: float = 120.0     # Time off-track navigating around obstacle before waking agent
 
     # Vector Field Histogram (VFH) Dynamic Filter & Safety Buffer Settings
     vfh_smoothing_tau_s: float = 1.0         # Exponential smoothing time constant (seconds) for temporal density filtering
     vfh_flank_clearance_m: float = 0.10      # Lateral flank safety buffer (distance to left/right hips)
     vfh_safety_margin_deg: float = 10.0      # Angular clearance margin (degrees) from obstacle boundaries in valleys
+    vfh_density_threshold_high: float = 0.15 # Density threshold to enter detour mode
+    vfh_density_threshold_low: float = 0.06  # Density threshold to exit detour mode / identify valleys
 
+    # VFH Candidate Heading Selection Weights
+    vfh_weight_goal: float = 2.0             # Weight favoring candidate valleys aligned with goal landmark
+    vfh_weight_current_heading: float = 0.5  # Weight favoring current body orientation
+    vfh_weight_prev_steering: float = 1.0    # Momentum/damping weight penalizing changes from previous steering direction (lower = more agile)
+
+    # VFH Visual Disambiguation & Exponential Bias Decay
+    vfh_ambiguity_threshold: float = 0.25    # Trigger threshold for |Left_Score - Right_Score| under which obstacle is ambiguous
+    vfh_bifurcation_min_divergence_deg: float = 60.0 # Minimum angular divergence between left and right candidates to qualify as bifurcation
+    vfh_snapshot_turn_angle_deg: float = 65.0 # In-place pivot angle in degrees for capturing left and right snapshots
+    vfh_ambiguity_cooldown_s: float = 30.0   # Cooldown period (seconds) before another visual disambiguation can trigger
+    vfh_visual_bias_weight: float = 15.5      # Cost function weight multiplier for agent's visual preference
+    vfh_visual_bias_decay_s: float = 10.0     # Characteristic exponential decay timescale (seconds) for visual preference bias
 
 config = AgentConfig()

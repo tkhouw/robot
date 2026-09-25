@@ -5,7 +5,7 @@ and momentum-damped target heading selection to eliminate oscillations.
 """
 
 import math
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Optional
 import numpy as np
 
 
@@ -28,6 +28,10 @@ class VFHPlanner:
         smoothing_tau_s: float = 1.0,
         flank_clearance_m: float = 0.16,
         safety_margin_deg: float = 25.0,
+        ambiguity_threshold: float = 0.15,
+        bifurcation_min_divergence_deg: float = 60.0,
+        visual_bias_weight: float = 2.5,
+        visual_bias_decay_s: float = 8.0,
     ):
         self.num_bins = num_bins
         self.bin_width_deg = 360.0 / num_bins
@@ -39,6 +43,10 @@ class VFHPlanner:
         self.smoothing_tau_s = max(0.01, smoothing_tau_s)
         self.flank_clearance_m = flank_clearance_m
         self.safety_margin_deg = safety_margin_deg
+        self.ambiguity_threshold = ambiguity_threshold
+        self.bifurcation_min_divergence_deg = bifurcation_min_divergence_deg
+        self.visual_bias_weight = visual_bias_weight
+        self.visual_bias_decay_s = max(0.1, visual_bias_decay_s)
 
         # Cost function weights (anti-oscillation tuning)
         self.weight_goal = weight_goal
@@ -54,8 +62,25 @@ class VFHPlanner:
         self.temporal_density: Optional[np.ndarray] = None
         self.last_update_time: Optional[float] = None
 
+        # Visual Disambiguation Preference Bias with Exponential Time Decay
+        # preference > 0 favors Left (CCW / positive relative yaw)
+        # preference < 0 favors Right (CW / negative relative yaw)
+        self.visual_bias_val: float = 0.0
+        self.visual_bias_start_time: float = 0.0
+
         # Circular Gaussian spatial smoothing kernel
         self.kernel = np.array([0.06, 0.24, 0.40, 0.24, 0.06], dtype=np.float64)
+
+    def set_visual_preference(self, score_left: float, score_right: float, timestamp: Optional[float] = None):
+        """
+        Sets the agent's visual preference bias between left and right corridors.
+        Initial bias = (score_left - score_right) * visual_bias_weight.
+        This bias exponentially decays over visual_bias_decay_s seconds.
+        """
+        import time
+        now = timestamp if timestamp is not None else time.time()
+        self.visual_bias_val = float(score_left - score_right) * self.visual_bias_weight
+        self.visual_bias_start_time = now
 
     def reset(self):
         """Resets planner state between navigation runs."""
@@ -64,6 +89,8 @@ class VFHPlanner:
         self.detour_start_time = 0.0
         self.temporal_density = None
         self.last_update_time = None
+        self.visual_bias_val = 0.0
+        self.visual_bias_start_time = 0.0
 
     def compute_steering(
         self,
@@ -281,7 +308,6 @@ class VFHPlanner:
                     candidate_headings_world.append(c2_deg)
 
                 # If goal direction falls inside this wide valley safely, add goal heading
-                goal_in_valley = False
                 diff_to_start = (goal_bin_idx - v_start) % n
                 diff_to_end = (v_end - goal_bin_idx) % n
                 if (diff_to_start + diff_to_end) == (v_width - 1):
@@ -298,11 +324,34 @@ class VFHPlanner:
             min_idx = int(np.argmin(smoothed_density))
             candidate_headings_world = [world_bin_angles_deg[min_idx]]
 
-        # 6. Cost function evaluation across candidate valley directions
+        # 6. Quantified Left vs Right Sector Scoring & Ambiguity Detection
+        # Left sector: relative angles [+5°, +95°]
+        # Right sector: relative angles [-95°, -5°]
+        left_clearances = [ranges_arr[i] for i in range(n) if 5.0 <= rel_angles_deg[i] <= 95.0]
+        right_clearances = [ranges_arr[i] for i in range(n) if -95.0 <= rel_angles_deg[i] <= -5.0]
+
+        left_dist_score = (np.mean(left_clearances) / self.safe_distance_m) if left_clearances else 0.0
+        right_dist_score = (np.mean(right_clearances) / self.safe_distance_m) if right_clearances else 0.0
+        left_dist_score = min(1.0, max(0.0, float(left_dist_score)))
+        right_dist_score = min(1.0, max(0.0, float(right_dist_score)))
+
+        # 7. Evaluate active Visual Bias with Exponential Time Decay:
+        # bias(t) = bias_0 * exp(-(t - t_0) / tau_decay)
+        active_visual_bias = 0.0
+        if self.visual_bias_val != 0.0:
+            elapsed_bias = curr_time - self.visual_bias_start_time
+            if 0.0 <= elapsed_bias <= (4.0 * self.visual_bias_decay_s):
+                active_visual_bias = self.visual_bias_val * math.exp(-elapsed_bias / self.visual_bias_decay_s)
+            else:
+                self.visual_bias_val = 0.0
+
+        # 8. Cost function evaluation across candidate valley directions
         best_heading = candidate_headings_world[0]
         best_cost = float("inf")
         prev_heading = self.last_selected_heading_deg if self.last_selected_heading_deg is not None else current_yaw_deg
 
+        # Track candidate costs and relative bearings
+        cand_evals = []
         for cand_deg in candidate_headings_world:
             # Angular difference to goal
             diff_goal = abs((cand_deg - target_heading_deg + 180.0) % 360.0 - 180.0)
@@ -311,15 +360,74 @@ class VFHPlanner:
             # Angular difference to previously chosen heading (MOMENTUM / HYSTERESIS DAMPING)
             diff_prev = abs((cand_deg - prev_heading + 180.0) % 360.0 - 180.0)
 
-            cost = (
+            # Visual preference bias term:
+            # Rel yaw > 0 is Left, rel yaw < 0 is Right (Standard ENU: counter-clockwise positive)
+            rel_yaw_cand = (cand_deg - current_yaw_deg + 180.0) % 360.0 - 180.0
+            direction_sign = 1.0 if rel_yaw_cand > 0 else (-1.0 if rel_yaw_cand < 0 else 0.0)
+            # If active_visual_bias > 0 (favors Left), direction_sign * active_visual_bias is positive for Left candidates,
+            # which REDUCES the cost of Left candidates:
+            visual_cost_discount = direction_sign * active_visual_bias * 20.0
+
+            # Base cost (without visual discount) is used to judge intrinsic navigation prominence
+            base_cost = (
                 self.weight_goal * diff_goal
                 + self.weight_current_heading * diff_curr
                 + self.weight_prev_steering * diff_prev
             )
+            total_cost = base_cost - visual_cost_discount
+            cand_evals.append({
+                "cand_deg": cand_deg,
+                "rel_yaw_deg": rel_yaw_cand,
+                "base_cost": base_cost,
+                "total_cost": total_cost,
+            })
 
-            if cost < best_cost:
-                best_cost = cost
+            if total_cost < best_cost:
+                best_cost = total_cost
                 best_heading = cand_deg
+
+        # 9. Evaluate Bifurcation Ambiguity using the MOST PROMINENT Left and Right candidate paths
+        # Left flank candidates: +10° to +120° relative to robot
+        # Right flank candidates: -120° to -10° relative to robot
+        left_evals = [e for e in cand_evals if 10.0 <= e["rel_yaw_deg"] <= 120.0]
+        right_evals = [e for e in cand_evals if -120.0 <= e["rel_yaw_deg"] <= -10.0]
+
+        has_left_cand = bool(left_evals)
+        has_right_cand = bool(right_evals)
+        score_left = round(0.7 * left_dist_score + (0.3 if has_left_cand else 0.0), 2)
+        score_right = round(0.7 * right_dist_score + (0.3 if has_right_cand else 0.0), 2)
+        score_diff = abs(score_left - score_right)
+
+        is_ambiguous = False
+        cand_divergence_deg = 0.0
+        if has_left_cand and has_right_cand:
+            # Find the MOST PROMINENT (lowest base cost) candidate on each flank
+            best_left_cand = min(left_evals, key=lambda x: x["base_cost"])
+            best_right_cand = min(right_evals, key=lambda x: x["base_cost"])
+
+            # Angular divergence between the two most prominent paths
+            cand_divergence_deg = abs(best_left_cand["rel_yaw_deg"] - best_right_cand["rel_yaw_deg"])
+
+            # Both paths must be competitive in cost (cost difference <= 45° equivalent penalty)
+            cost_divergence = abs(best_left_cand["base_cost"] - best_right_cand["base_cost"])
+            cost_competitive = cost_divergence <= (self.weight_goal * 45.0)
+
+            # Ambiguity triggers ONLY when:
+            # 1. Clearance scores on both flanks are close (|diff| <= ambiguity_threshold)
+            # 2. Both paths are competitive in navigation cost
+            # 3. The angular divergence between the MOST PROMINENT left and right paths is >= bifurcation_min_divergence_deg
+            if (
+                score_diff <= self.ambiguity_threshold
+                and cost_competitive
+                and cand_divergence_deg >= self.bifurcation_min_divergence_deg
+            ):
+                is_ambiguous = True
+                print(
+                    f"[VFH CANDIDATE ANALYSIS] Bifurcation detected! "
+                    f"Best Left: {best_left_cand['rel_yaw_deg']:+.1f}° (cost={best_left_cand['base_cost']:.1f}), "
+                    f"Best Right: {best_right_cand['rel_yaw_deg']:+.1f}° (cost={best_right_cand['base_cost']:.1f}), "
+                    f"Divergence: {cand_divergence_deg:.1f}° >= {self.bifurcation_min_divergence_deg:.1f}°"
+                )
 
         self.last_selected_heading_deg = best_heading
         heading_err = (best_heading - current_yaw_deg + 180.0) % 360.0 - 180.0
@@ -331,4 +439,9 @@ class VFHPlanner:
             "emergency_stop": False,
             "polar_density": [round(float(v), 3) for v in smoothed_density],
             "min_distance_m": round(min_dist, 2),
+            "score_left": score_left,
+            "score_right": score_right,
+            "is_ambiguous": is_ambiguous,
+            "cand_divergence_deg": round(cand_divergence_deg, 1),
+            "active_visual_bias": round(float(active_visual_bias), 2),
         }

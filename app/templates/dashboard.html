@@ -965,9 +965,9 @@
             <!-- Coffee Table with 4 Legs (MuJoCo center 1.10, +0.85; size 1.05m x 0.55m) -> SVG center (1.10, -0.85) -->
             <rect class="map-obstacle-furniture" x="0.575" y="-1.125" width="1.05" height="0.55" rx="0.02" fill-opacity="0.75" stroke="#bc8cff" stroke-width="0.015"/>
 
-            <!-- 55-inch TV & Media Stand (MuJoCo center 1.10, -0.20; size 1.40m x 0.36m) -> SVG center (1.10, +0.20) -->
-            <rect class="map-obstacle-furniture" x="0.40" y="0.02" width="1.40" height="0.36" rx="0.02"/>
-            <rect class="map-obstacle-tv" x="0.49" y="0.19" width="1.22" height="0.04" rx="0.01"/>
+            <!-- 55-inch TV & Media Stand (MuJoCo center 0.50, -0.20; size 1.40m x 0.36m) -> SVG center (0.50, +0.20) -->
+            <rect class="map-obstacle-furniture" x="-0.20" y="0.02" width="1.40" height="0.36" rx="0.02"/>
+            <rect class="map-obstacle-tv" x="-0.11" y="0.19" width="1.22" height="0.04" rx="0.01"/>
 
             <!-- Potted Plant (MuJoCo center -0.80, +1.80) -> SVG center (-0.80, -1.80) -->
             <circle class="map-obstacle-plant" cx="-0.80" cy="-1.80" r="0.26"/>
@@ -976,8 +976,8 @@
             <!-- Delivery Box (MuJoCo center 2.50, +0.15; size 0.38m x 0.32m) -> SVG center (2.50, -0.15) -->
             <rect class="map-obstacle-box" x="2.31" y="-0.31" width="0.38" height="0.32" rx="0.01"/>
 
-            <!-- Landmark 1: Charging Dock (0.0, 0.0) -->
-            <g class="landmark-node" id="nodeDock" transform="translate(0.0, 0.0)" onclick="handleLandmarkClick('charging_dock', 'Charging Dock')">
+            <!-- Landmark 1: Charging Dock (-0.6, 0.0) -->
+            <g class="landmark-node" id="nodeDock" transform="translate(-0.6, 0.0)" onclick="handleLandmarkClick('charging_dock', 'Charging Dock')">
               <circle r="0.09" fill="#238636" fill-opacity="0.25" filter="url(#glowGreen)"/>
               <circle r="0.06" fill="#238636" stroke="#2ea043" stroke-width="0.012"/>
               <rect x="-0.03" y="-0.03" width="0.06" height="0.06" rx="0.012" fill="#fff"/>
@@ -1246,6 +1246,14 @@
       document.getElementById('mjpegStream').src = `/video/stream?cam=${camName}&t=${Date.now()}`;
       document.getElementById('btnTrackingCam').classList.toggle('active', camName === 'tracking_cam');
       document.getElementById('btnFrontCam').classList.toggle('active', camName === 'front_camera');
+      const wrapper = document.querySelector('.video-wrapper');
+      if (wrapper) {
+        if (camName === 'front_camera') {
+          wrapper.style.height = '320px';
+        } else {
+          wrapper.style.height = '460px';
+        }
+      }
     }
 
     function setServerOffline(reason) {
