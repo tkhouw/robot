@@ -73,6 +73,10 @@ class AgentConfig(BaseSettings):
     # 1.0 = true real-time, 1.5 = 1.5x real-time speed.
     sim_time_warp: float = 1.0
 
+    # Navigation Goal Arrival Tolerances (meters)
+    nav_goal_tolerance_m: float = 0.08  # Distance threshold for arrival at an unobstructed goal
+    nav_obstructed_goal_tolerance_m: float = 0.35  # Proximity threshold to accept arrival if target point is physically blocked by an obstacle
+
     # 360 DTOF LiDAR & Obstacle Avoidance Settings
     lidar_num_samples: int = 72
     lidar_max_range_m: float = 12.0

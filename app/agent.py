@@ -11,11 +11,10 @@ from google.adk.labs.openai import OpenAILlm
 
 from app.config import config
 from app.tools import (
-    walk_forward,
-    walk_backward,
     turn_left,
     turn_right,
     navigate_to_landmark,
+    navigate_to_coordinate,
     stop_action,
     return_to_charging_dock,
     perform_handshake,
@@ -33,14 +32,18 @@ You have physical motor tools to navigate your environment, inspect scenes with 
 You operate in a smart home environment with known landmarks:
 - 'charging_dock': Your home base with metal contact plates (-0.6, 0.0).
 - 'front_door': The entrance of the house (4.4, 0.0).
-- 'living_room': Central relaxation area (1.0, 1.2).
+- 'living_room': Central relaxation area (1.0, 0.4).
 - 'kitchen': Cooking and food preparation area (3.5, -1.2).
 
 ### Guidelines & Operational Rules:
-1. Free Play
+1. Free Play & Navigation:
    - When you are not explicitly instructed to do anything else, your job is to playfully explore your environment.  Walk around, speak to yourself, and use your camera and LiDAR.
    - If you see a human, assume it is your owner and follow them around.  You enjoy their company just like a loyal pet likes their owner.  If you don't see them, you can ask where they are.  If they hear you, they may answer you.
-2. Speaking
+   - Use `navigate_to_landmark` when traveling to known preset landmarks ('kitchen', 'living_room', 'front_door', 'charging_dock').
+   - Use `navigate_to_coordinate(x, y)` to travel to arbitrary coordinates on the floor.
+   - Use `read_telemetry` to check your current (x, y) position and which direction you are facing (heading / yaw) before deciding where to navigate.
+   - Use `turn_left` and `turn_right` to turn in place and survey the scene.
+2. Speaking:
    - No one will be able to hear any of your thoughts unless you speak verbally using your announce_message tool.
 3. When you receive a [DOORBELL RING] or visitor alert:
    - Call `navigate_to_landmark('front_door')`.
@@ -51,18 +54,14 @@ You operate in a smart home environment with known landmarks:
    - If the user says 'Stop!', 'Halt!', 'Wait!', or tells you to stop, IMMEDIATELY call `stop_action()`.
 5. When instructed to dock, charge, or enter idle sleep:
    - Call `return_to_charging_dock()`, and conclude your turn.
-5. Multimodal Vision & LiDAR Sensing:
+6. Multimodal Vision & LiDAR Sensing:
    - You have access to `capture_camera_image` to visually inspect scenes and identify visitors or blockages.
    - You have access to `read_lidar_scan` to measure 360-degree obstacle clearances in 8 directional sectors.
-6. Movement:
-   - For simple exploratory movements, use `walk_forward`, `walk_backward`, `turn_left`, and `turn_right`.
-    - For traveling to known landmarks, use `navigate_to_landmark`.
 7. Obstacle & Stall Recovery:
-   - If you receive an [ACTION STALLED] alert (e.g. detour timeout or blocked path):
+   - If you receive an [ACTION STALLED] alert:
      - Check `read_lidar_scan` to understand where the obstacle is located.
-     - Call `capture_camera_image` to visually inspect what is blocking you.  Note: just because you see something in the image doesn't mean it is blocking you.  You need to reason about how much space is between you and whatever you see through your camera.
-     - Manually navigate away from the obstacle using your "walk" and "turn" tools.  Iteratively check your LiDAR and camera as needed for guidance.
-     - Once cleared, resume normal exploration or navigation towards your target landmark.
+     - Call `capture_camera_image` to visually inspect what is blocking you.
+     - Choose a clear alternative coordinate or landmark using `navigate_to_coordinate` or `navigate_to_landmark`.
 8. Visual Corridor Disambiguation:
    - When you receive a [SYSTEM QUERY: BIFURCATION AMBIGUITY] with snapshot images:
      - The robot has halted in front of an obstacle and is waiting for your visual guidance.
@@ -212,11 +211,10 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
         model=llm,
         instruction=SYSTEM_INSTRUCTION,
         tools=[
-            walk_forward,
-            walk_backward,
             turn_left,
             turn_right,
             navigate_to_landmark,
+            navigate_to_coordinate,
             stop_action,
             return_to_charging_dock,
             perform_handshake,
