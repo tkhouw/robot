@@ -1,5 +1,9 @@
 # Autonomous Pet Companion: AI Agent & Social Robot Digital Twin
 
+<p align="center">
+  <img src="docs/images/robot.png" alt="Quadruped AI Companion on Charging Dock" width="520"/>
+</p>
+
 An AI-driven quadruped robot companion built for domestic human-robot interaction, natural conversation, and autonomous home navigation.
 
 The goal of this project is to give a **multimodal AI agent physical agency in the real world**. Operating like an inquisitive, loyal pet, the agent explores its home environment, follows its owner, greets visitors at the front door, speaks aloud, and navigates smoothly between domestic landmarks.
