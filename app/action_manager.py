@@ -209,7 +209,7 @@ class ActionManager:
         on_complete_callback: Optional[Callable[[], None]] = None,
     ) -> dict:
         """
-        Starts non-blocking closed-loop navigation toward landmark coordinates.
+        Starts non-blocking closed-loop navigation toward coordinates (landmark or custom target).
         """
         self.cancel_action()
 
@@ -219,7 +219,8 @@ class ActionManager:
         dy = target_y - curr_pos[1]
         initial_dist = math.hypot(dx, dy)
 
-        if initial_dist < 0.08:
+        goal_tolerance = getattr(config, "nav_goal_tolerance_m", 0.08)
+        if initial_dist < goal_tolerance:
             if on_complete_callback:
                 on_complete_callback()
             return {
@@ -524,8 +525,9 @@ class ActionManager:
                 self._action_details["remaining_dist_m"] = round(dist, 3)
                 now = time.time()
 
-                # Check arrival condition (within 8 cm of target landmark)
-                if dist <= 0.08:
+                # Check arrival condition (within configured tolerance of target landmark)
+                goal_tolerance = getattr(config, "nav_goal_tolerance_m", 0.08)
+                if dist <= goal_tolerance:
                     robot.stop()
                     robot.stand()
                     self.progress_pct = 100.0
@@ -602,8 +604,55 @@ class ActionManager:
                     min_clearance = vfh_result["min_distance_m"]
                     polar_density = vfh_result["polar_density"]
 
-                    # Emergency stop condition
+                    # Emergency stop condition:
+                    # Check whether an obstacle is physically blocking the robot
                     if vfh_result.get("emergency_stop", False):
+                        obstructed_goal_tolerance = getattr(config, "nav_obstructed_goal_tolerance_m", 0.35)
+                        # Check if the obstacle is in the direct line-of-sight toward the target point:
+                        # Angle to target relative to robot body:
+                        rel_goal_angle = ((target_heading_deg - curr_yaw + 180.0) % 360.0) - 180.0
+                        ranges = lidar_scan.get("ranges", []) if lidar_scan else []
+                        is_target_obstructed = False
+                        if ranges and dist <= obstructed_goal_tolerance:
+                            n_bins = len(ranges)
+                            goal_bin = int(round((rel_goal_angle % 360.0) / (360.0 / n_bins))) % n_bins
+                            # Check beam directly pointing toward goal (and adjacent bins +/- 1)
+                            for offset in (-1, 0, 1):
+                                check_bin = (goal_bin + offset) % n_bins
+                                if ranges[check_bin] < dist:
+                                    is_target_obstructed = True
+                                    break
+
+                        if is_target_obstructed:
+                            print(f"\n[OBSTRUCTED GOAL REACHED] Arrived within {dist:.2f}m of '{landmark_name}' (target point is occupied by an obstacle).")
+                            robot.stop()
+                            robot.stand()
+                            self.progress_pct = 100.0
+                            self._action_details["eta_s"] = 0.0
+
+                            if on_complete_callback:
+                                on_complete_callback()
+
+                            self._emit_gateway_event(
+                                "action_progress",
+                                {
+                                    "action": "navigate_to_landmark",
+                                    "landmark": landmark_name,
+                                    "progress_pct": 100.0,
+                                    "status": "completed",
+                                },
+                            )
+                            self._emit_gateway_event(
+                                "action_completed",
+                                {
+                                    "action": "navigate_to_landmark",
+                                    "landmark": landmark_name,
+                                    "result": f"Arrived within {dist:.2f}m of '{landmark_name}' (target location is occupied by an obstacle). Robot standing safely.",
+                                    "position": [round(curr_x, 3), round(curr_y, 3)],
+                                },
+                            )
+                            break
+
                         print(f"\n[LIDAR EMERGENCY STOP] Obstacle at {min_clearance:.2f}m! Halting...")
                         robot.stop()
                         robot.stand()

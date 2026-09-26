@@ -129,24 +129,6 @@ def get_action_manager() -> ActionManager:
 # Individual Locomotion Tools
 # ---------------------------------------------------------------------------
 
-def walk_forward(distance_meters: float = 0.2, tool_context: Optional[ToolContext] = None) -> str:
-    """Walk forward by a specified distance in meters."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-    dist = abs(distance_meters)
-    get_action_manager().start_relative_motion("walk_forward", distance_meters=dist)
-    return f"Initiated walk_forward ({dist:.2f}m)."
-
-
-def walk_backward(distance_meters: float = 0.2, tool_context: Optional[ToolContext] = None) -> str:
-    """Walk backward by a specified distance in meters."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-    dist = abs(distance_meters)
-    get_action_manager().start_relative_motion("walk_backward", distance_meters=-dist)
-    return f"Initiated walk_backward ({dist:.2f}m)."
-
-
 def turn_left(degrees: float = 90.0, tool_context: Optional[ToolContext] = None) -> str:
     """Rotate body counter-clockwise (to the left) by a given number of degrees."""
     if tool_context:
@@ -169,30 +151,54 @@ def turn_right(degrees: float = 90.0, tool_context: Optional[ToolContext] = None
 # High-Level Navigation & Docking Tools
 # ---------------------------------------------------------------------------
 
-def navigate_to_landmark(landmark_name: str, tool_context: Optional[ToolContext] = None) -> str:
-    """
-    Begin autonomous navigation to a domestic landmark.
-    Supported landmarks: 'front_door', 'charging_dock', 'living_room', 'kitchen'.
-    """
-    if tool_context:
-        tool_context.actions.skip_summarization = True
+from app.environment_map import get_environment_map
 
-    landmark_key = landmark_name.strip().lower().replace(" ", "_")
+
+def navigate_to_landmark(target_name: str, tool_context: Optional[ToolContext] = None) -> str:
+    """Use this tool when there is a specific named landmark you want to go to such as 'living_room', 'kitchen', 'front_door', or 'charging_dock'."""
+    landmark_key = target_name.strip().lower().replace(" ", "_")
     if landmark_key not in config.landmarks:
         valid_keys = ", ".join(config.landmarks.keys())
-        return f"Unknown landmark '{landmark_name}'. Valid landmarks are: {valid_keys}"
+        return f"Unknown landmark '{target_name}'. Valid landmarks are: {valid_keys}"
 
     target_x, target_y = config.landmarks[landmark_key]
     mgr = get_action_manager()
     res = mgr.start_navigation(landmark_name=landmark_key, target_x=target_x, target_y=target_y)
 
     if res.get("status") == "already_at_destination":
-        return f"Already at landmark '{landmark_name}'."
+        return f"Already at landmark '{target_name}'."
+
+    # Only skip summarization once navigation is successfully initiated
+    if tool_context:
+        tool_context.actions.skip_summarization = True
 
     return (
-        f"Navigation started towards '{landmark_name}' at ({target_x}, {target_y}). "
-        f"Distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s."
+        f"Navigation started towards landmark '{target_name}' at ({target_x}, {target_y}). "
+        f"Distance: {res['initial_dist_m'] if 'initial_dist_m' in res else res.get('distance_m', 0.0):.2f}m, ETA: ~{res.get('eta_s', res.get('eta_seconds', 0.0))}s."
     )
+
+
+def navigate_to_coordinate(x: float, y: float, tool_context: Optional[ToolContext] = None) -> str:
+    """Use this tool to travel to arbitrary coordinates x, y."""
+    env_map = get_environment_map()
+    is_valid, validation_msg = env_map.validate_target(x, y)
+    if not is_valid:
+        return f"Cannot navigate to ({x:.2f}, {y:.2f}): {validation_msg}"
+
+    label = f"coordinate_{x:.2f}_{y:.2f}"
+    mgr = get_action_manager()
+    res = mgr.start_navigation(landmark_name=label, target_x=x, target_y=y)
+
+    if res.get("status") == "already_at_destination":
+        return f"Already at coordinate ({x:.2f}, {y:.2f})."
+
+    # Only skip summarization once navigation is successfully initiated
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
+    dist = res.get("initial_dist_m", res.get("distance_m", 0.0))
+    eta = res.get("eta_s", res.get("eta_seconds", 0.0))
+    return f"Navigation started towards coordinate ({x:.2f}, {y:.2f}). Distance: {dist:.2f}m, ETA: ~{eta}s."
 
 
 def stop_action(tool_context: Optional[ToolContext] = None) -> str:
@@ -297,17 +303,36 @@ def announce_message(message: str) -> str:
 
 def read_telemetry() -> Dict[str, Any]:
     """
-    Reads the robot's current sensory telemetry, including 3D world position (x, y, z),
-    Euler orientation (roll, pitch, yaw) in degrees, and movement status.
+    Reads the robot's current sensory telemetry, including 2D floor position (x, y),
+    Euler orientation (roll, pitch, yaw) in degrees, cardinal heading, and valid floor bounds.
+    Yaw reference: 0° = East (+X forward), +90° = North (+Y left), -90° = South (-Y right), +/-180° = West (-X rear).
     """
     robot = get_robot()
     pos, quat = robot.get_pose()
     rpy = robot.get_imu()
+    yaw_deg = round(float(rpy[2]), 1)
+
+    # Determine cardinal heading string
+    # Normalizing yaw to [0, 360)
+    norm_yaw = (yaw_deg + 360.0) % 360.0
+    cardinals = [
+        "East (+X)", "North-East", "North (+Y)", "North-West",
+        "West (-X)", "South-West", "South (-Y)", "South-East"
+    ]
+    card_idx = int(round(norm_yaw / 45.0)) % 8
+    cardinal_name = cardinals[card_idx]
+
+    env_map = get_environment_map()
+    summary = env_map.get_summary()
+
     return {
-        "position_xyz": [round(float(v), 3) for v in pos],
+        "position_xy": [round(float(pos[0]), 3), round(float(pos[1]), 3)],
+        "heading_degrees": yaw_deg,
+        "cardinal_direction": f"Facing {cardinal_name} (Yaw: {yaw_deg:+.1f}°)",
         "orientation_rpy": [round(float(v), 1) for v in rpy],
-        "quaternion_wxyz": [round(float(v), 4) for v in quat],
         "is_moving": getattr(robot, "is_moving", False),
+        "floorplan_bounds": summary.get("navigable_range"),
+        "known_landmarks": {k: list(v) for k, v in config.landmarks.items()},
     }
 
 
