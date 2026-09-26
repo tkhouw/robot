@@ -2,8 +2,9 @@
 Configuration settings for Scout: Autonomous Pet Companion.
 """
 
+import sys
 from typing import Dict, Tuple
-from pydantic import field_validator
+from pydantic import field_validator, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,7 @@ class AgentConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # LLM Settings (must be provided via environment or .env file)
-    openrouter_api_key: str
+    openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Default to DeepSeek multimodal vision model
     model_name: str = "deepseek/deepseek-v4-flash-vision-exp"
@@ -21,9 +22,13 @@ class AgentConfig(BaseSettings):
     @field_validator("openrouter_api_key")
     @classmethod
     def validate_api_key(cls, v: str) -> str:
-        if not v or not v.strip():
+        if not v or not v.strip() or v.strip() == "your_openrouter_api_key_here":
             raise ValueError(
-                "OPENROUTER_API_KEY must be set in your environment or .env file and cannot be empty or None.  See .env.example."
+                "Missing OpenRouter API key!\n"
+                "Please create a .env file with your OPENROUTER_API_KEY.\n"
+                "See .env.example for details:\n\n"
+                "    cp .env.example .env\n"
+                "    # Edit .env and paste your actual OpenRouter API key"
             )
         return v.strip()
 
@@ -112,4 +117,27 @@ class AgentConfig(BaseSettings):
     battery_low_threshold_pct: float = 20.0  # Threshold triggering P1 low-battery alert
     battery_critical_threshold_pct: float = 5.0 # Critical threshold triggering urgent P1 alert
 
-config = AgentConfig()
+try:
+    config = AgentConfig()
+except ValidationError as e:
+    print("\n" + "=" * 70, file=sys.stderr)
+    print(" [CONFIGURATION ERROR]", file=sys.stderr)
+    print("-" * 70, file=sys.stderr)
+    for err in e.errors():
+        loc = err.get("loc", ())
+        field = loc[0] if loc else "unknown"
+        if field == "openrouter_api_key":
+            print(
+                " • openrouter_api_key:\n"
+                "   Missing or invalid OpenRouter API key!\n"
+                "   Please create a .env file with your OPENROUTER_API_KEY.\n"
+                "   See .env.example for details:\n\n"
+                "       cp .env.example .env\n"
+                "       # Open .env and set your OPENROUTER_API_KEY\n",
+                file=sys.stderr,
+            )
+        else:
+            msg = err.get("msg", "Invalid value")
+            print(f" • {field}: {msg}", file=sys.stderr)
+    print("=" * 70 + "\n", file=sys.stderr)
+    sys.exit(1)
