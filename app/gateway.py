@@ -52,7 +52,13 @@ DEBOUNCE_WINDOWS = {
     "motion_detected": 30.0,  # 30 seconds debounce
     "battery_low": 60.0,      # 1 minute debounce
     "battery_critical": 30.0, # 30 seconds debounce
+    "battery_charged": 300.0, # 5 minutes debounce
+    "battery_depleted": 600.0,# 10 minutes debounce
 }
+
+# Battery cycle event flags
+_battery_full_notified: bool = False
+_battery_depleted_notified: bool = False
 
 
 def log_event_audit(event_type: str, source: str, priority: int, status: str, detail: str = ""):
@@ -132,7 +138,7 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     2: action_progress (Normal action progress feedback)
     3: motion_detected, passive camera alert, generic sensor events
     """
-    if event.event_type in ("user_message", "battery_critical"):
+    if event.event_type in ("user_message", "battery_critical", "battery_depleted"):
         return 0
     if event.event_type in (
         "doorbell_press",
@@ -140,6 +146,7 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
         "action_stalled",
         "bifurcation_disambiguation_required",
         "battery_low",
+        "battery_charged",
     ):
         return 1
     if event.event_type == "action_progress":
@@ -267,28 +274,61 @@ async def telemetry_broadcast_loop():
             bat_pct = robot.get_battery_level()
             charging = robot.is_charging()
 
-            # Continuous Low Battery Monitor (runs reliably independent of SSE client state)
+            # Continuous Power & Battery Cycle Monitor
+            global _battery_full_notified, _battery_depleted_notified
             low_thresh = getattr(config, "battery_low_threshold_pct", 20.0)
             crit_thresh = getattr(config, "battery_critical_threshold_pct", 5.0)
 
-            if not charging and bat_pct <= low_thresh:
-                event_type = "battery_critical" if bat_pct <= crit_thresh else "battery_low"
-                key = f"battery_monitor:{event_type}"
-                now_ts = time.time()
-                last_ts = _last_event_timestamps.get(key, 0.0)
-                debounce_win = DEBOUNCE_WINDOWS.get(event_type, 60.0)
-
-                # Only dispatch if debounce window has elapsed; receive_event records the timestamp
-                if (now_ts - last_ts) >= debounce_win:
+            # 1. 100% Full Charge Alert (wakes up agent upon completing charging)
+            if bat_pct >= 100.0 and charging:
+                if not _battery_full_notified:
+                    _battery_full_notified = True
                     asyncio.create_task(
                         receive_event(
                             RobotStimulusEvent(
                                 source="battery_monitor",
-                                event_type=event_type,
-                                payload={"battery_pct": bat_pct},
+                                event_type="battery_charged",
+                                payload={"battery_pct": 100.0},
                             )
                         )
                     )
+            elif bat_pct < 98.0:
+                _battery_full_notified = False
+
+            # 2. 0% Depleted Shutdown Alert (fires once, halts further critical alerts)
+            if bat_pct <= 0.0:
+                if not _battery_depleted_notified:
+                    _battery_depleted_notified = True
+                    asyncio.create_task(
+                        receive_event(
+                            RobotStimulusEvent(
+                                source="battery_monitor",
+                                event_type="battery_depleted",
+                                payload={"battery_pct": 0.0},
+                            )
+                        )
+                    )
+            else:
+                _battery_depleted_notified = False
+                # 3. Low & Critical Alerts (only fire while battery > 0% and robot is not charging)
+                if not charging and bat_pct <= low_thresh:
+                    event_type = "battery_critical" if bat_pct <= crit_thresh else "battery_low"
+                    key = f"battery_monitor:{event_type}"
+                    now_ts = time.time()
+                    last_ts = _last_event_timestamps.get(key, 0.0)
+                    debounce_win = DEBOUNCE_WINDOWS.get(event_type, 60.0)
+
+                    # Only dispatch if debounce window has elapsed; receive_event records the timestamp
+                    if (now_ts - last_ts) >= debounce_win:
+                        asyncio.create_task(
+                            receive_event(
+                                RobotStimulusEvent(
+                                    source="battery_monitor",
+                                    event_type=event_type,
+                                    payload={"battery_pct": bat_pct},
+                                )
+                            )
+                        )
 
             if sse_subscribers:
                 pos, _ = robot.get_pose()
@@ -474,6 +514,18 @@ async def receive_event(event: RobotStimulusEvent):
         agent_prompt = (
             f"[SYSTEM ALERT: BATTERY {severity}] Current battery level is {pct:.1f}%. "
             f"Power is running low. Please navigate to your charging dock immediately using `return_to_charging_dock()` to recharge."
+        )
+
+    elif event.event_type == "battery_charged":
+        agent_prompt = (
+            "[SYSTEM EVENT: BATTERY FULLY CHARGED] Battery has reached 100% capacity! "
+            "You are fully charged and ready for instructions, room patrol, or exploration."
+        )
+
+    elif event.event_type == "battery_depleted":
+        agent_prompt = (
+            "[SYSTEM EVENT: BATTERY DEPLETED] Battery has reached 0.0%! "
+            "All locomotion has been shut down and you are unable to move until physically placed on your charging dock."
         )
 
     elif event.source == "motion_sensor" and event.event_type == "motion_detected":

@@ -78,6 +78,8 @@ You operate in a smart home environment with known landmarks:
 9. Battery & Power Management:
    - You can check your battery level and charging status at any time with `check_battery` or in `read_telemetry`.
    - When you receive a [BATTERY LOW] alert or notice battery < {low_bat:.0f}%, IMMEDIATELY call `return_to_charging_dock()` to navigate to your charging dock and replenish power.
+   - When you receive a [BATTERY FULLY CHARGED] alert, you have reached 100% and can resume household patrols or tasks.
+   - If you receive a [BATTERY DEPLETED] alert, power is completely exhausted (0%) and locomotion has shut down.
 """
 
 
