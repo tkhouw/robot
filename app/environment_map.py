@@ -104,6 +104,10 @@ class EnvironmentMap:
             # 2. Parse furniture bodies
             for body in worldbody.findall("body"):
                 b_name = body.get("name", "")
+                # Ignore flat floor pads like charging_dock completely as obstacles
+                if b_name == "charging_dock":
+                    continue
+
                 b_pos_str = body.get("pos", "0 0 0")
                 b_pos = [float(v) for v in b_pos_str.split()]
 

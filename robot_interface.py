@@ -81,6 +81,18 @@ class BaseRobot(ABC):
         """
         return None
 
+    def get_battery_level(self) -> float:
+        """
+        Returns current estimated battery percentage (0.0 to 100.0).
+        """
+        raise NotImplementedError("Subclasses must implement get_battery_level()")
+
+    def is_charging(self) -> bool:
+        """
+        Returns True if the robot is currently on charging contacts and replenishing power.
+        """
+        raise NotImplementedError("Subclasses must implement is_charging()")
+
     # =========================================================================
     # High-Level Semantic Wrappers (Shared identically between Sim & Real)
     # These methods compile semantic requests into official WAVEGO JSON packets.

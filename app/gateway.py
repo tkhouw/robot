@@ -50,6 +50,8 @@ _last_event_timestamps: Dict[str, float] = {}
 DEBOUNCE_WINDOWS = {
     "doorbell_press": 60.0,   # 1 minute debounce
     "motion_detected": 30.0,  # 30 seconds debounce
+    "battery_low": 60.0,      # 1 minute debounce
+    "battery_critical": 30.0, # 30 seconds debounce
 }
 
 
@@ -130,13 +132,14 @@ def get_event_priority(event: RobotStimulusEvent) -> int:
     2: action_progress (Normal action progress feedback)
     3: motion_detected, passive camera alert, generic sensor events
     """
-    if event.event_type == "user_message":
+    if event.event_type in ("user_message", "battery_critical"):
         return 0
     if event.event_type in (
         "doorbell_press",
         "action_completed",
         "action_stalled",
         "bifurcation_disambiguation_required",
+        "battery_low",
     ):
         return 1
     if event.event_type == "action_progress":
@@ -257,11 +260,37 @@ async def event_processor_loop():
 is_shutting_down: bool = False
 
 async def telemetry_broadcast_loop():
-    """Pushes real-time telemetry over the existing SSE stream (4 Hz) without polling."""
+    """Pushes real-time telemetry over the existing SSE stream (4 Hz) and monitors system power."""
     while not is_shutting_down:
         try:
+            robot = get_robot()
+            bat_pct = robot.get_battery_level()
+            charging = robot.is_charging()
+
+            # Continuous Low Battery Monitor (runs reliably independent of SSE client state)
+            low_thresh = getattr(config, "battery_low_threshold_pct", 20.0)
+            crit_thresh = getattr(config, "battery_critical_threshold_pct", 5.0)
+
+            if not charging and bat_pct <= low_thresh:
+                event_type = "battery_critical" if bat_pct <= crit_thresh else "battery_low"
+                key = f"battery_monitor:{event_type}"
+                now_ts = time.time()
+                last_ts = _last_event_timestamps.get(key, 0.0)
+                debounce_win = DEBOUNCE_WINDOWS.get(event_type, 60.0)
+
+                # Only dispatch if debounce window has elapsed; receive_event records the timestamp
+                if (now_ts - last_ts) >= debounce_win:
+                    asyncio.create_task(
+                        receive_event(
+                            RobotStimulusEvent(
+                                source="battery_monitor",
+                                event_type=event_type,
+                                payload={"battery_pct": bat_pct},
+                            )
+                        )
+                    )
+
             if sse_subscribers:
-                robot = get_robot()
                 pos, _ = robot.get_pose()
                 rpy = robot.get_imu()
                 action_mgr = get_action_manager()
@@ -283,6 +312,10 @@ async def telemetry_broadcast_loop():
                 data = {
                     "pos": [round(float(pos[0]), 3), round(float(pos[1]), 3), round(float(pos[2]), 3)],
                     "yaw": round(float(rpy[2]), 1),
+                    "battery": {
+                        "pct": round(float(bat_pct), 1),
+                        "is_charging": bool(charging),
+                    },
                     "is_busy": is_agent_busy or action_mgr.is_busy,
                     "active_action": action_mgr.active_action,
                     "action_progress": action_mgr.progress_pct,
@@ -433,6 +466,15 @@ async def receive_event(event: RobotStimulusEvent):
                 "An unrecognized visitor is at the front door. "
                 "Please navigate to the front door and announce a polite greeting."
             )
+
+    elif event.event_type in ("battery_low", "battery_critical"):
+        pct = event.payload.get("battery_pct", 0.0)
+        is_crit = event.event_type == "battery_critical"
+        severity = "CRITICAL" if is_crit else "LOW"
+        agent_prompt = (
+            f"[SYSTEM ALERT: BATTERY {severity}] Current battery level is {pct:.1f}%. "
+            f"Power is running low. Please navigate to your charging dock immediately using `return_to_charging_dock()` to recharge."
+        )
 
     elif event.source == "motion_sensor" and event.event_type == "motion_detected":
         diff_val = event.payload.get("difference", 0.0)

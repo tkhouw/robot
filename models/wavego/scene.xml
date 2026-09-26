@@ -40,6 +40,10 @@
     <material name="flower_red" rgba="0.90 0.15 0.25 1.0" specular="0.2" shininess="0.2"/>
     <material name="flower_yellow" rgba="0.98 0.82 0.12 1.0" specular="0.2" shininess="0.2"/>
     <material name="flower_pink" rgba="0.95 0.45 0.65 1.0" specular="0.2" shininess="0.2"/>
+    <!-- Charging dock materials -->
+    <material name="dock_mat" rgba="0.18 0.20 0.24 1.0" specular="0.3" shininess="0.4"/>
+    <material name="dock_contact" rgba="0.85 0.75 0.35 1.0" specular="0.8" shininess="0.9"/>
+    <material name="dock_amber" rgba="0.95 0.65 0.10 1.0" specular="0.5" shininess="0.8"/>
   </asset>
 
   <worldbody>
@@ -162,6 +166,15 @@
     <body name="delivery_box" pos="2.50 0.15 0">
       <geom name="box_body" type="box" size="0.19 0.16 0.14" pos="0 0 0.14" material="cardboard"/>
       <geom name="box_tape" type="box" size="0.035 0.161 0.002" pos="0 0 0.281" material="tape_stripe"/>
+    </body>
+
+    <!-- ==================== HOME CHARGING DOCK ==================== -->
+    <!-- Positioned at (-0.60, 0.00) with thin profile on floor and metallic contacts -->
+    <body name="charging_dock" pos="-0.60 0.00 0">
+      <geom name="dock_base_geom" type="box" size="0.16 0.16 0.002" pos="0 0 0.002" material="dock_mat" contype="0" conaffinity="0"/>
+      <geom name="dock_strip_l" type="box" size="0.10 0.015 0.001" pos="0 0.06 0.005" material="dock_contact" contype="0" conaffinity="0"/>
+      <geom name="dock_strip_r" type="box" size="0.10 0.015 0.001" pos="0 -0.06 0.005" material="dock_contact" contype="0" conaffinity="0"/>
+      <geom name="dock_led" type="cylinder" size="0.012 0.002" pos="-0.12 0 0.005" material="dock_amber" contype="0" conaffinity="0"/>
     </body>
   </worldbody>
 </mujoco>

@@ -330,9 +330,25 @@ def read_telemetry() -> Dict[str, Any]:
         "heading_degrees": yaw_deg,
         "cardinal_direction": f"Facing {cardinal_name} (Yaw: {yaw_deg:+.1f}°)",
         "orientation_rpy": [round(float(v), 1) for v in rpy],
+        "battery_percentage": round(robot.get_battery_level(), 1),
+        "is_charging": robot.is_charging(),
         "is_moving": getattr(robot, "is_moving", False),
         "floorplan_bounds": summary.get("navigable_range"),
         "known_landmarks": {k: list(v) for k, v in config.landmarks.items()},
+    }
+
+
+def check_battery() -> Dict[str, Any]:
+    """Check the current battery level and charging status of the robot."""
+    robot = get_robot()
+    level = robot.get_battery_level()
+    charging = robot.is_charging()
+    low_thresh = getattr(config, "battery_low_threshold_pct", 20.0)
+    status_desc = "Charging on dock" if charging else ("Normal" if level > low_thresh else "LOW BATTERY")
+    return {
+        "battery_percentage": round(level, 1),
+        "is_charging": charging,
+        "status": status_desc,
     }
 
 

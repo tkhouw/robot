@@ -844,6 +844,10 @@
           <div class="val" id="telemYaw">0.0°</div>
         </div>
         <div class="telem-card">
+          <div class="label">Battery</div>
+          <div class="val" id="telemBat">100%</div>
+        </div>
+        <div class="telem-card">
           <div class="label">LiDAR Clearance</div>
           <div class="val" id="telemLidar">-- m</div>
         </div>
@@ -976,11 +980,14 @@
             <!-- Delivery Box (MuJoCo center 2.50, +0.15; size 0.38m x 0.32m) -> SVG center (2.50, -0.15) -->
             <rect class="map-obstacle-box" x="2.31" y="-0.31" width="0.38" height="0.32" rx="0.01"/>
 
-            <!-- Landmark 1: Charging Dock (-0.6, 0.0) -->
+            <!-- Landmark 1: Charging Dock (-0.6, 0.0) with square base and lightning bolt icon -->
             <g class="landmark-node" id="nodeDock" transform="translate(-0.6, 0.0)" onclick="handleLandmarkClick('charging_dock', 'Charging Dock')">
-              <circle r="0.09" fill="#238636" fill-opacity="0.25" filter="url(#glowGreen)"/>
-              <circle r="0.06" fill="#238636" stroke="#2ea043" stroke-width="0.012"/>
-              <rect x="-0.03" y="-0.03" width="0.06" height="0.06" rx="0.012" fill="#fff"/>
+              <rect x="-0.14" y="-0.14" width="0.28" height="0.28" rx="0.03" fill="#1f242c" stroke="#3fb950" stroke-width="0.016" filter="url(#glowGreen)"/>
+              <!-- Contact strips -->
+              <rect x="-0.08" y="-0.09" width="0.16" height="0.02" rx="0.005" fill="#d29922"/>
+              <rect x="-0.08" y="0.07" width="0.16" height="0.02" rx="0.005" fill="#d29922"/>
+              <!-- Sharp gold lightning bolt path in center -->
+              <path d="M 0.01 -0.06 L -0.05 0.01 L 0.00 0.01 L -0.01 0.06 L 0.05 -0.01 L 0.00 -0.01 Z" fill="#e3b341" stroke="#fff" stroke-width="0.003"/>
             </g>
 
             <!-- Landmark 2: Front Door (4.4, 0.0) -> SVG Y=0.0 -->
@@ -1586,6 +1593,24 @@
       if (!t || !t.pos) return;
       document.getElementById('telemPos').textContent = `${t.pos[0].toFixed(2)}, ${t.pos[1].toFixed(2)} m`;
       document.getElementById('telemYaw').textContent = `${t.yaw.toFixed(1)}°`;
+
+      const batEl = document.getElementById('telemBat');
+      if (batEl && t.battery) {
+        const pct = t.battery.pct;
+        const isCharging = t.battery.is_charging;
+        if (isCharging) {
+          batEl.innerHTML = `<span style="color:var(--accent-green, #3fb950); animation: pulse 1.5s infinite;">⚡ ${pct.toFixed(0)}%</span>`;
+        } else {
+          batEl.textContent = `${pct.toFixed(0)}%`;
+          if (pct <= 20) {
+            batEl.style.color = 'var(--accent-red, #f85149)';
+          } else if (pct <= 50) {
+            batEl.style.color = 'var(--accent-orange, #d29922)';
+          } else {
+            batEl.style.color = 'var(--accent-green, #3fb950)';
+          }
+        }
+      }
       
       const lidarEl = document.getElementById('telemLidar');
       if (lidarEl && t.lidar) {

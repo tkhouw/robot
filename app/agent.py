@@ -23,6 +23,7 @@ from app.tools import (
     read_telemetry,
     read_lidar_scan,
     set_corridor_preference,
+    check_battery,
 )
 
 def get_system_instruction() -> str:
@@ -30,6 +31,7 @@ def get_system_instruction() -> str:
     door = config.landmarks.get("front_door", (4.4, 0.0))
     living = config.landmarks.get("living_room", (1.1, 0.85))
     kitchen = config.landmarks.get("kitchen", (3.5, -1.2))
+    low_bat = getattr(config, "battery_low_threshold_pct", 20.0)
 
     return f"""You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
 You have physical motor tools to navigate your environment, inspect scenes with your camera, scan obstacles with your 360 DTOF LiDAR, announce speech, and charge your battery.
@@ -73,6 +75,9 @@ You operate in a smart home environment with known landmarks:
      - The robot has halted in front of an obstacle and is waiting for your visual guidance.
      - Inspect the left view (Image 1) and right view (Image 2) carefully.
      - Immediately call `set_corridor_preference(score_left, score_right)` with scores from 0.0 (blocked) to 1.0 (clear/open) to guide the robot down the more open route or the route that you know is best.
+9. Battery & Power Management:
+   - You can check your battery level and charging status at any time with `check_battery` or in `read_telemetry`.
+   - When you receive a [BATTERY LOW] alert or notice battery < {low_bat:.0f}%, IMMEDIATELY call `return_to_charging_dock()` to navigate to your charging dock and replenish power.
 """
 
 
@@ -229,6 +234,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
             read_telemetry,
             read_lidar_scan,
             set_corridor_preference,
+            check_battery,
         ],
     )
     return agent

@@ -99,6 +99,10 @@ class WavegoSim(BaseRobot):
             else:
                 self._env_geom_ids.add(g_id)
 
+        # Battery simulation state
+        self.battery_level: float = float(getattr(config, "battery_initial_pct", 100.0))
+        self._is_charging: bool = False
+
         # Settle physics for 50 steps
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
@@ -156,10 +160,36 @@ class WavegoSim(BaseRobot):
         return self._renderers[key]
 
     def step(self, dt: float = None):
-        """Advances physics and kinematics by one timestep."""
+        """Advances physics, kinematics, and battery simulation by one timestep."""
         if dt is None:
             dt = self.model.opt.timestep
         with self._lock:
+            # Battery simulation
+            dock_coords = config.landmarks.get("charging_dock", (-0.6, 0.0))
+            curr_x, curr_y = float(self.data.qpos[0]), float(self.data.qpos[1])
+            dist_to_dock = math.hypot(curr_x - dock_coords[0], curr_y - dock_coords[1])
+
+            # Robot charges if crouched low on the charging dock contact plate
+            if dist_to_dock <= 0.25 and self.stand_h <= 75.0:
+                self._is_charging = True
+                charge_rate = getattr(config, "battery_charge_rate", 10.0)
+                self.battery_level = min(100.0, self.battery_level + charge_rate * dt)
+            else:
+                self._is_charging = False
+                if self.is_moving:
+                    drain_rate = getattr(config, "battery_drain_rate_moving", 0.35)
+                else:
+                    drain_rate = getattr(config, "battery_drain_rate_idle", 0.02)
+                self.battery_level = max(0.0, self.battery_level - drain_rate * dt)
+
+            # Battery depletion safeguard: shut down locomotion if battery reaches 0%
+            if self.battery_level <= 0.0:
+                self.move_fb = 0.0
+                self.move_lr = 0.0
+                self.is_moving = False
+                self.stand_h = 70.0  # Collapse onto floor
+                self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
+
             self.update_gait(dt)
             mujoco.mj_step(self.model, self.data)
 
@@ -283,6 +313,16 @@ class WavegoSim(BaseRobot):
         yaw = math.atan2(siny_cosp, cosy_cosp)
 
         return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
+
+    def get_battery_level(self) -> float:
+        """Returns current simulated battery percentage [0.0 - 100.0]."""
+        with self._lock:
+            return round(float(self.battery_level), 1)
+
+    def is_charging(self) -> bool:
+        """Returns True if the robot is currently positioned on dock contacts and replenishing."""
+        with self._lock:
+            return bool(self._is_charging)
 
     def _render_camera_raw(self, camera_name: str, width: int, height: int) -> np.ndarray:
         """Internal helper to render RGB array from camera model. Must be called in OpenGL thread."""
