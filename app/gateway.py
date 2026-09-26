@@ -376,6 +376,30 @@ async def startup_event():
     asyncio.create_task(event_processor_loop())
     asyncio.create_task(telemetry_broadcast_loop())
 
+    async def auto_wake_exploration():
+        # Wait until user opens the dashboard (SSE stream connected) so they see the wake-up action
+        while not sse_subscribers and not is_shutting_down:
+            await asyncio.sleep(0.5)
+
+        if is_shutting_down:
+            return
+
+        # Brief settling delay for browser DOM and SVG elements to mount
+        await asyncio.sleep(1.5)
+        wake_message = (
+            "Good morning! Wake up and begin your playful domestic patrol. "
+            "Say hello, explore the house, and check out what's going on around the home."
+        )
+        await receive_event(
+            RobotStimulusEvent(
+                source="domestic_owner",
+                event_type="user_message",
+                payload={"message": wake_message},
+            )
+        )
+
+    asyncio.create_task(auto_wake_exploration())
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
