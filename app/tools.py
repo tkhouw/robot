@@ -156,9 +156,6 @@ from app.environment_map import get_environment_map
 
 def navigate_to_landmark(target_name: str, tool_context: Optional[ToolContext] = None) -> str:
     """Use this tool when there is a specific named landmark you want to go to such as 'living_room', 'kitchen', 'front_door', or 'charging_dock'."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-
     landmark_key = target_name.strip().lower().replace(" ", "_")
     if landmark_key not in config.landmarks:
         valid_keys = ", ".join(config.landmarks.keys())
@@ -171,6 +168,10 @@ def navigate_to_landmark(target_name: str, tool_context: Optional[ToolContext] =
     if res.get("status") == "already_at_destination":
         return f"Already at landmark '{target_name}'."
 
+    # Only skip summarization once navigation is successfully initiated
+    if tool_context:
+        tool_context.actions.skip_summarization = True
+
     return (
         f"Navigation started towards landmark '{target_name}' at ({target_x}, {target_y}). "
         f"Distance: {res['initial_dist_m'] if 'initial_dist_m' in res else res.get('distance_m', 0.0):.2f}m, ETA: ~{res.get('eta_s', res.get('eta_seconds', 0.0))}s."
@@ -179,9 +180,6 @@ def navigate_to_landmark(target_name: str, tool_context: Optional[ToolContext] =
 
 def navigate_to_coordinate(x: float, y: float, tool_context: Optional[ToolContext] = None) -> str:
     """Use this tool to travel to arbitrary coordinates x, y."""
-    if tool_context:
-        tool_context.actions.skip_summarization = True
-
     env_map = get_environment_map()
     is_valid, validation_msg = env_map.validate_target(x, y)
     if not is_valid:
@@ -193,6 +191,10 @@ def navigate_to_coordinate(x: float, y: float, tool_context: Optional[ToolContex
 
     if res.get("status") == "already_at_destination":
         return f"Already at coordinate ({x:.2f}, {y:.2f})."
+
+    # Only skip summarization once navigation is successfully initiated
+    if tool_context:
+        tool_context.actions.skip_summarization = True
 
     dist = res.get("initial_dist_m", res.get("distance_m", 0.0))
     eta = res.get("eta_s", res.get("eta_seconds", 0.0))
