@@ -1,6 +1,6 @@
 """
-Official WAVEGO Pro Protocol Definitions and Command Constants.
-Directly matching Waveshare WAVEGO_Pro_PlatformIO/src/Config.h and main.cpp.
+Scout Quadruped Robot Protocol Definitions and Command Constants.
+Standard serial JSON command dictionary matching onboard ESP32 controller.
 """
 
 import json

@@ -1,5 +1,5 @@
 """
-WAVEGO Pro Interactive Simulation Demo.
+Scout Quadruped Interactive Simulation Demo.
 Allows real-time interactive testing of individual actions:
 - Via 3D viewer keyboard shortcuts (W/A/S/D/Space/C/H/1-4)
 - Via terminal CLI commands while viewer is running
@@ -10,12 +10,12 @@ Run this script with:
 
 import sys
 import threading
-from sim import WavegoSim
+from sim import QuadrupedSim
 
 
 def print_help():
     print("\n" + "=" * 65)
-    print("        WAVEGO Pro Interactive Controls & Keybindings        ")
+    print("          Scout Interactive Controls & Keybindings           ")
     print("=" * 65)
     print(" [Viewer Window Keyboard Shortcuts]")
     print("   W          : Walk Forward (FB = +50)")
@@ -42,7 +42,7 @@ def print_help():
     print("=" * 65 + "\n")
 
 
-def make_key_callback(robot: WavegoSim):
+def make_key_callback(robot: QuadrupedSim):
     """Creates a GLFW key callback for interactive viewer window keypresses."""
     # GLFW keycodes
     GLFW_KEY_W = 87
@@ -105,7 +105,7 @@ def make_key_callback(robot: WavegoSim):
     return on_key
 
 
-def terminal_input_thread(robot: WavegoSim, stop_event: threading.Event):
+def terminal_input_thread(robot: QuadrupedSim, stop_event: threading.Event):
     """Listens for CLI commands from terminal stdin in background."""
     while not stop_event.is_set():
         try:
@@ -164,7 +164,7 @@ def terminal_input_thread(robot: WavegoSim, stop_event: threading.Event):
 
 if __name__ == "__main__":
     print_help()
-    robot = WavegoSim()
+    robot = QuadrupedSim()
 
     # Start terminal command listener in background
     stop_event = threading.Event()

@@ -1,5 +1,5 @@
 """
-Passive Vision Motion Sensor for WAVEGO Pro Quadruped.
+Passive Vision Motion Sensor for Scout Quadruped.
 Runs an efficient local frame-differencing loop to detect visual changes
 and fire events without consuming LLM API calls.
 """

@@ -1,7 +1,7 @@
 """
-WAVEGO Pro MuJoCo Simulation & High-Level Controller Interface.
-Integrates the authentic closed-loop 4-bar parallel linkage mechanism
-with the official Waveshare BodyCtrl kinematics and JSON command interface.
+Scout Quadruped MuJoCo Simulation & High-Level Controller Interface.
+Integrates the closed-loop 4-bar parallel linkage mechanism
+with kinematics and JSON command interface.
 """
 
 import math
@@ -13,14 +13,14 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
-from wavego_kinematics import (
-    WavegoKinematics,
+from kinematics import (
+    QuadrupedKinematics,
     STAND_HEIGHT,
 )
 
 from robot_interface import BaseRobot
 from app.config import config
-from wavego_protocol import (
+from robot_protocol import (
     CMD_STAND_UP,
     CMD_BASIC_MOVE,
     CMD_BASIC_FUNC,
@@ -36,10 +36,10 @@ from wavego_protocol import (
 )
 
 
-class WavegoSim(BaseRobot):
+class QuadrupedSim(BaseRobot):
     """
-    MuJoCo Simulation driver providing the official WAVEGO Pro API
-    running on top of the authentic closed-loop 4-bar linkage model.
+    MuJoCo Simulation driver for the Scout quadruped robot
+    running on top of the closed-loop 4-bar linkage model.
     Implements BaseRobot for complete hardware-swappability.
     """
 
@@ -47,7 +47,7 @@ class WavegoSim(BaseRobot):
         super().__init__()
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
-        self.kinematics = WavegoKinematics()
+        self.kinematics = QuadrupedKinematics()
 
         # Motion & Gait State configured from config.py
         self.move_fb = 0.0      # Forward / Backward (-100 to 100)
@@ -195,8 +195,8 @@ class WavegoSim(BaseRobot):
 
     def send_cmd(self, cmd: Union[Dict[str, Any], str]):
         """
-        Official WAVEGO JSON Command Handler.
-        Directly compatible with ESP32 firmware commands.
+        Serial JSON Command Handler.
+        Directly compatible with onboard controller commands.
         Accepts dict or raw JSON string and immediately executes kinematics.
         """
         cmd_dict = parse_cmd(cmd)
@@ -206,14 +206,14 @@ class WavegoSim(BaseRobot):
             self.move_fb = 0.0
             self.move_lr = 0.0
             self.stand_h = STAND_HEIGHT
-            # Immediately invoke WavegoKinematics to calculate 12-servo standing pose
+            # Immediately invoke QuadrupedKinematics to calculate 12-servo standing pose
             self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
 
         elif cmd_type == CMD_STAND_UP_HEIGHT:
             self.stand_h = float(cmd_dict.get("h", STAND_HEIGHT))
             self.move_fb = 0.0
             self.move_lr = 0.0
-            # Immediately invoke WavegoKinematics to calculate variable height pose
+            # Immediately invoke QuadrupedKinematics to calculate variable height pose
             self.target_ctrl[:] = self.kinematics.stand(self.stand_h, rad=True)
 
         elif cmd_type == CMD_SINGLE_LEG_CTRL:

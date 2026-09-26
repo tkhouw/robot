@@ -1,5 +1,5 @@
 """
-Unified Action Manager for WAVEGO Pro.
+Unified Action Manager for Scout.
 Runs physical actions (locomotion, gestures, navigation) sequentially in a single
 dedicated background worker thread, emitting real-time progress and completion
 events to the gateway without blocking the cognitive agent.
@@ -19,7 +19,7 @@ from app.vfh_planner import VFHPlanner
 
 class PhysicalStallDetector:
     """
-    Unified physical stall supervisor for WAVEGO Pro.
+    Unified physical stall supervisor for Scout quadruped.
     Tracks ground translation (x, y) when robot is commanded to walk.
     Triggers a stall if the robot is walking (is_moving and not is_turning_in_place)
     but fails to translate min_displacement_m over timeout_s.
@@ -494,7 +494,7 @@ class ActionManager:
         feedback_interval = 2.0  # Send feedback event every 2 seconds
         last_pos_for_vel, _ = robot.get_pose()
         last_vel_time = time.time()
-        measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to WAVEGO trot
+        measured_speed = 0.06  # Rolling average ground speed (m/s) calibrated to quadruped trot
 
         initial_dist = self._action_details.get("initial_dist_m", 1.0)
         stall_detector = PhysicalStallDetector(timeout_s=6.0, min_displacement_m=0.04)

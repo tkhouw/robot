@@ -1,5 +1,5 @@
 """
-ADK Tools for WAVEGO Pro Quadruped Robot.
+ADK Tools for Scout Autonomous Pet Companion.
 Wraps BaseRobot hardware and simulation calls into typed LLM-callable functions.
 """
 

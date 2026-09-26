@@ -103,7 +103,8 @@ robot/
 │       └── dashboard.html  # Mission Control Web Dashboard (dual cameras, 2D map, live feed)
 │
 ├── sim.py                  # Physics digital twin in MuJoCo (360° LiDAR, cameras, 12 servos)
-├── wavego_kinematics.py    # Standalone quadruped kinematics & trot gait engine
+├── kinematics.py           # Standalone quadruped kinematics & trot gait engine
+├── robot_protocol.py       # Serial protocol definitions & command constants
 ├── main.py                 # Application entrypoint
 └── demo.py                 # Interactive 3D visualizer script for manual evaluation
 ```

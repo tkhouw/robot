@@ -1,16 +1,15 @@
 """
-Official WAVEGO Pro Kinematics and Gait Generator.
-Ported directly from Waveshare BodyCtrl.cpp and BodyCtrl.h.
+Scout Quadruped Kinematics and Gait Generator.
 
 Provides exact closed-form planar linkage inverse kinematics,
-wiggle plane kinematics, triangular gait generator, and diagonal gait generator.
+wiggle plane kinematics, triangular crawl gait, and trot gait generator.
 """
 
 import math
 from typing import List, Tuple
 
 
-# Structural dimensions from BodyCtrl.cpp (in mm)
+# Structural dimensions (in mm)
 LINKAGE_W = 19.15    # Lateral distance between hip wiggle axis and leg plane
 LINKAGE_S = 12.20    # Longitudinal spacing between Fore (A) and Back (B) servos
 LINKAGE_A = 40.00    # Servo horn length (connecting to servo)
@@ -20,7 +19,7 @@ LINKAGE_D = 31.7750  # Lower part of leg (knee to ankle)
 LINKAGE_E = 30.8076  # Foot offset
 WIGGLE_ERROR = 0.0
 
-# Walking parameters from BodyCtrl.cpp (in mm)
+# Walking parameters (in mm)
 WALK_HEIGHT_MAX = 110.0
 WALK_HEIGHT_MIN = 75.0
 WALK_HEIGHT = 95.0
@@ -34,10 +33,9 @@ STAND_HEIGHT = 95.0
 WALK_LIFT_PROP = 0.25
 
 
-class WavegoKinematics:
+class QuadrupedKinematics:
     """
-    Implements the authentic Waveshare WAVEGO Pro kinematics and gait generation.
-    Matches BodyCtrl.cpp joint ordering, coordinate conventions, and linkage geometry.
+    Implements closed-form 4-bar parallel linkage kinematics and gait generation for Scout.
     """
 
     def __init__(self):

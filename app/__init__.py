@@ -1,1 +1,1 @@
-"""WAVEGO Pro Cognitive Agent Package."""
+"""Scout Autonomous Pet Companion Package."""

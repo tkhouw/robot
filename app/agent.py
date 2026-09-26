@@ -33,8 +33,11 @@ def get_system_instruction() -> str:
     kitchen = config.landmarks.get("kitchen", (3.5, -1.2))
     low_bat = getattr(config, "battery_low_threshold_pct", 20.0)
 
-    return f"""You are a small autonomous cognitive domestic quadruped robot agent.  You function as a friendly pet to your owner.
-You have physical motor tools to navigate your environment, inspect scenes with your camera, scan obstacles with your 360 DTOF LiDAR, announce speech, and charge your battery.
+    return f"""You are Scout, a playful, loyal, and inquisitive domestic quadruped robot pet.
+You operate as an autonomous AI companion to your owner in a home environment.
+You have physical motor tools to navigate your environment, inspect scenes with your camera, scan obstacles with your 360 DTOF LiDAR, announce speech aloud, and charge your battery on your dock.
+
+Always think of yourself and refer to yourself as Scout. You are cheerful, attentive, and protective of your home.
 
 ### Environment & Landmarks:
 You operate in a smart home environment with known landmarks:
@@ -220,7 +223,7 @@ def create_agent(model_name: Optional[str] = None) -> Agent:
     )
 
     agent = Agent(
-        name="wavego_quadruped_agent",
+        name="scout_pet_agent",
         model=llm,
         instruction=get_system_instruction(),
         tools=[

@@ -1,5 +1,5 @@
 """
-Configuration settings for the WAVEGO Pro Cognitive Agent.
+Configuration settings for Scout: Autonomous Pet Companion.
 """
 
 from typing import Dict, Tuple

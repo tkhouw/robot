@@ -1,5 +1,5 @@
 """
-FastAPI Event Stream Gateway for the WAVEGO Pro Quadruped.
+FastAPI Event Stream Gateway for Scout: Autonomous Pet Companion.
 Exposes endpoints for external event triggers (Nest Doorbell, Vision Motion)
 and voice/text commands, streaming agent reasoning via Server-Sent Events (SSE).
 """
@@ -21,7 +21,7 @@ from app.agent import QuadrupedCognitiveRuntime
 from app.config import config
 from app.tools import get_robot, get_action_manager
 
-app = FastAPI(title="WAVEGO Pro Cognitive Agent Gateway")
+app = FastAPI(title="Scout Autonomous Pet Companion Gateway")
 
 # Dedicated single-thread executor for OpenGL/GLX rendering to avoid X11 BadAccess multi-thread conflicts
 render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="MuJoCoRenderer")
@@ -637,7 +637,7 @@ async def dashboard_index():
     if os.path.exists(dashboard_path):
         with open(dashboard_path, "r", encoding="utf-8") as f:
             return f.read()
-    return "<h1>WAVEGO Dashboard template not found</h1>"
+    return "<h1>Scout Dashboard template not found</h1>"
 
 
 @app.get("/video/stream")

@@ -1,5 +1,5 @@
 """
-WAVEGO Pro Cognitive Agent Entry Point.
+Scout Autonomous Pet Companion Entry Point.
 Launches the robot controller, binds ADK tools, starts the passive vision motion detector,
 and serves the FastAPI event stream gateway for Google Nest Doorbell and user voice/text commands.
 """
@@ -9,7 +9,7 @@ import threading
 import uvicorn
 import requests
 
-from sim import WavegoSim
+from sim import QuadrupedSim
 from robot_interface import PhysicalRobotController
 from app.config import config
 from app.tools import set_robot_instance
@@ -36,18 +36,18 @@ def on_motion_detected(diff_score: float):
 
 def main():
     print("=" * 65)
-    print("   WAVEGO Pro Cognitive Agent: Google ADK Event-Driven System   ")
+    print("      Scout: Autonomous Pet Companion (Google ADK Architecture)      ")
     print("=" * 65)
 
     # 1. Select and initialize robot controller
     use_physical = "--real" in sys.argv
     if use_physical:
         serial_port = "/dev/ttyUSB0"
-        print(f"Connecting to Physical WAVEGO Pro via {serial_port}...")
+        print(f"Connecting to Physical Scout Quadruped via {serial_port}...")
         robot = PhysicalRobotController(serial_port)
     else:
-        print("Initializing WAVEGO Pro in MuJoCo Simulation...")
-        robot = WavegoSim()
+        print("Initializing Scout Quadruped in MuJoCo Simulation...")
+        robot = QuadrupedSim()
 
     # 2. Bind robot controller to ADK tools
     set_robot_instance(robot)
@@ -72,7 +72,6 @@ def main():
     # Note: On Linux/X11/Wayland, GLFW requires window creation to occur on the MAIN thread.
     try:
         if hasattr(robot, "launch_viewer"):
-            import threading
             print("\nLaunching native MuJoCo 3D Interactive Window on main thread...")
             server_config = uvicorn.Config(
                 app,

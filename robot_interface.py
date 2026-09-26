@@ -1,14 +1,14 @@
 """
-Base Robot Interface for WAVEGO Pro Quadruped.
+Base Robot Interface for Scout Quadruped.
 Provides the hardware-swappable abstraction layer uniting simulation (MuJoCo)
-and physical hardware (ESP32 serial / wireless communication).
+and physical hardware (serial / wireless communication).
 """
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple, Union, Optional
 import numpy as np
 
-from wavego_protocol import (
+from robot_protocol import (
     CMD_STAND_UP,
     CMD_BASIC_MOVE,
     CMD_BASIC_FUNC,
@@ -23,7 +23,7 @@ from wavego_protocol import (
 
 class BaseRobot(ABC):
     """
-    Abstract Base Class for the WAVEGO Pro robot.
+    Abstract Base Class for the Scout quadruped robot.
     Both SimRobotController (MuJoCo) and PhysicalRobotController (Serial/WiFi)
     implement this identical interface.
     """
@@ -32,7 +32,7 @@ class BaseRobot(ABC):
     def send_cmd(self, cmd: Union[Dict[str, Any], str]) -> None:
         """
         The low-level hardware communication bottleneck.
-        Accepts official WAVEGO JSON dictionary or string and executes it on the backend.
+        Accepts serial JSON command dictionary or string and executes it on the backend.
         """
         pass
 
@@ -95,7 +95,7 @@ class BaseRobot(ABC):
 
     # =========================================================================
     # High-Level Semantic Wrappers (Shared identically between Sim & Real)
-    # These methods compile semantic requests into official WAVEGO JSON packets.
+    # These methods compile semantic requests into serial JSON packets.
     # =========================================================================
 
     def __init__(self):
@@ -149,7 +149,7 @@ class BaseRobot(ABC):
 
 class PhysicalRobotController(BaseRobot):
     """
-    Physical Robot Driver for WAVEGO Pro.
+    Physical Robot Driver for Scout Quadruped.
     Sends raw JSON packets over UART serial cable (or WebSocket / TCP socket).
     """
 
