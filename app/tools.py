@@ -231,6 +231,9 @@ def return_to_charging_dock(tool_context: Optional[ToolContext] = None) -> str:
 
     robot = get_robot()
     mgr = get_action_manager()
+    dock_coords = config.landmarks.get("charging_dock", (-0.6, 0.0))
+    target_x = float(dock_coords[0])
+    target_y = float(dock_coords[1])
 
     def on_dock_reached():
         print("[CHARGING DOCK] Arrived at dock! Crouching onto metal contact plate...")
@@ -238,17 +241,17 @@ def return_to_charging_dock(tool_context: Optional[ToolContext] = None) -> str:
 
     res = mgr.start_navigation(
         landmark_name="charging_dock",
-        target_x=0.0,
-        target_y=0.0,
+        target_x=target_x,
+        target_y=target_y,
         on_complete_callback=on_dock_reached,
     )
 
     if res.get("status") == "already_at_destination":
         robot.crouch()
-        return "Already at charging dock. Crouched onto metal contact plates."
+        return f"Already at charging dock ({target_x:.2f}, {target_y:.2f}). Crouched onto metal contact plates."
 
     return (
-        f"Docking sequence initiated towards (0.0, 0.0). "
+        f"Docking sequence initiated towards ({target_x:.2f}, {target_y:.2f}). "
         f"Initial distance: {res['initial_distance_m']}m, ETA: ~{res['estimated_eta_s']}s."
     )
 
