@@ -106,7 +106,7 @@ class AgentConfig(BaseSettings):
 
     # Battery Simulation Settings
     battery_initial_pct: float = 100.0
-    battery_drain_rate_moving: float = 1.35  # % per second walking (~4.7 min continuous walking)
+    battery_drain_rate_moving: float = 0.35  # % per second walking (~4.7 min continuous walking)
     battery_drain_rate_idle: float = 0.02    # % per second standing (~83 min idle standby)
     battery_charge_rate: float = 10.0        # % per second charging on dock (10 seconds to full charge)
     battery_low_threshold_pct: float = 20.0  # Threshold triggering P1 low-battery alert
