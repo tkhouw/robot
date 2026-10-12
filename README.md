@@ -4,6 +4,12 @@
   <img src="docs/images/robot.png" alt="Quadruped AI Companion on Charging Dock" width="520"/>
 </p>
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Scout Mission Control Web Dashboard" width="850"/>
+  <br/>
+  <em>Scout Mission Control dashboard featuring real-time camera streams, 2D floorplan tracking with interactive landmark dispatch, stimulus controls, and live cognitive reasoning feed.</em>
+</p>
+
 An AI-driven quadruped robot companion built for domestic human-robot interaction, natural conversation, and autonomous home navigation.
 
 The goal of this project is to give a **multimodal AI agent physical agency in the real world**. Operating like an inquisitive, loyal pet, the agent explores its home environment, follows its owner, greets visitors at the front door, speaks aloud, and navigates smoothly between domestic landmarks.
@@ -135,12 +141,6 @@ Open your browser to:
 ```
 http://localhost:8000/
 ```
-
-<p align="center">
-  <img src="docs/images/dashboard.png" alt="Scout Mission Control Web Dashboard" width="850"/>
-  <br/>
-  <em>Scout Mission Control dashboard featuring real-time camera streams, 2D floorplan tracking with interactive landmark dispatch, stimulus controls, and live cognitive reasoning feed.</em>
-</p>
 
 - **👁️ Robot Eye & 🌐 3rd-Person Cameras**: Stream real-time first-person fisheye video or overhead spectator views.
 - **🗺️ Interactive 2D Floorplan**: Real-time odometry trail and click-to-navigate landmarks (⚡ **Dock**, 🚪 **Front Door**, 🛋️ **Living Room**, 🍳 **Kitchen**).
