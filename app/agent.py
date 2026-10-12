@@ -107,24 +107,30 @@ class MultimodalToolOpenAILlm(OpenAILlm):
 
         for content in llm_request.contents or []:
             converted = _content_to_openai_messages(content)
+            extra_user_images = []
             # Inspect if content contains a function_response with multimodal parts
             for part in getattr(content, "parts", []) or []:
                 if getattr(part, "function_response", None) and getattr(part.function_response, "parts", None):
-                    resp_id = part.function_response.id or ""
-                    for msg in converted:
-                        if msg.get("role") == "tool" and msg.get("tool_call_id") == resp_id:
-                            text_body = msg.get("content", "")
-                            content_list = [{"type": "text", "text": text_body}]
-                            for subpart in part.function_response.parts:
-                                if getattr(subpart, "inline_data", None) and subpart.inline_data.data:
-                                    mime = subpart.inline_data.mime_type or "image/png"
-                                    b64 = base64.b64encode(subpart.inline_data.data).decode("utf-8")
-                                    content_list.append({
-                                        "type": "image_url",
-                                        "image_url": {"url": f"data:{mime};base64,{b64}"},
-                                    })
-                            msg["content"] = content_list
+                    resp_name = getattr(part.function_response, "name", "tool")
+                    img_parts = []
+                    for subpart in part.function_response.parts:
+                        if getattr(subpart, "inline_data", None) and subpart.inline_data.data:
+                            mime = subpart.inline_data.mime_type or "image/png"
+                            b64 = base64.b64encode(subpart.inline_data.data).decode("utf-8")
+                            img_parts.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{mime};base64,{b64}"},
+                            })
+                    if img_parts:
+                        extra_user_images.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"[Observation frame from {resp_name}]:"},
+                                *img_parts,
+                            ],
+                        })
             messages.extend(converted)
+            messages.extend(extra_user_images)
 
         # Delegate kwargs assembly and LLM execution using original methods
         from google.adk.labs.openai._openai_llm import (
