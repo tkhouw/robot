@@ -136,6 +136,12 @@ Open your browser to:
 http://localhost:8000/
 ```
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Scout Mission Control Web Dashboard" width="850"/>
+  <br/>
+  <em>Scout Mission Control dashboard featuring real-time camera streams, 2D floorplan tracking with interactive landmark dispatch, stimulus controls, and live cognitive reasoning feed.</em>
+</p>
+
 - **👁️ Robot Eye & 🌐 3rd-Person Cameras**: Stream real-time first-person fisheye video or overhead spectator views.
 - **🗺️ Interactive 2D Floorplan**: Real-time odometry trail and click-to-navigate landmarks (⚡ **Dock**, 🚪 **Front Door**, 🛋️ **Living Room**, 🍳 **Kitchen**).
 - **🔔 Stimulus Controls**: Ring the front doorbell, dispatch the robot to its dock, or chat directly with the agent.
